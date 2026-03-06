@@ -1,0 +1,5 @@
+{
+  "name": "HotelMate POS",
+  "description": "A full-featured hotel Point of Sale system with real-time updates, table/room management, and reporting.",
+  "requestFramePermissions": []
+}

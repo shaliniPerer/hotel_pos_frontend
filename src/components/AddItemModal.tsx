@@ -1,0 +1,307 @@
+import React, { useRef, useState } from 'react';
+import { X, Plus, Upload } from 'lucide-react';
+import { useStore } from '../store';
+
+interface Props {
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+type Tab = 'manual' | 'excel';
+
+export default function AddItemModal({ onClose, onSaved }: Props) {
+  const { categories } = useStore();
+  const addProduct = useStore((s) => s.addProduct);
+  const addCategory = useStore((s) => s.addCategory);
+
+  const [tab, setTab] = useState<Tab>('manual');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Form fields
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [price, setPrice] = useState('0');
+  const [categoryId, setCategoryId] = useState('');
+  const [posCenter, setPosCenter] = useState(true);
+  const [kot, setKot] = useState(false);
+  const [bot, setBot] = useState(false);
+  const [imageDataUrl, setImageDataUrl] = useState('');
+  const [imageFileName, setImageFileName] = useState('');
+
+  // Inline new-category creation
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [addingCat, setAddingCat] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setImageDataUrl(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCatName.trim()) return;
+    setAddingCat(true);
+    try {
+      const cat = await addCategory({
+        name: newCatName.trim(),
+        color: 'bg-slate-100',
+        sort_order: categories.length + 1,
+      });
+      setCategoryId(cat.id);
+      setNewCatName('');
+      setShowNewCat(false);
+    } catch (e) {
+      console.error('Add category error:', e);
+    } finally {
+      setAddingCat(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError('Item Name is required.'); return; }
+    if (!categoryId) { setError('Please select a category.'); return; }
+    if (isNaN(Number(price)) || Number(price) < 0) { setError('Please enter a valid price.'); return; }
+    setError('');
+    setSaving(true);
+    try {
+      await addProduct({
+        code,
+        name: name.trim(),
+        description,
+        price: Number(price),
+        category_id: categoryId,
+        image: imageDataUrl,
+        kot,
+        bot,
+      });
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to save item.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[95vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 shrink-0">
+          <h2 className="text-lg font-bold text-slate-900">Add New Item</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="mx-6 mb-4 flex rounded-lg bg-slate-100 p-1 shrink-0">
+          <button
+            onClick={() => setTab('manual')}
+            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${tab === 'manual' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Add Manual Item
+          </button>
+          <button
+            onClick={() => setTab('excel')}
+            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${tab === 'excel' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Import Excel
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 pb-2 space-y-4">
+          {tab === 'excel' ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-3">
+              <Upload size={40} className="opacity-40" />
+              <p className="text-sm">Excel import coming soon</p>
+            </div>
+          ) : (
+            <>
+              {/* Item Code */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Item Code</label>
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+
+              {/* Item Name */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Item Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Description <span className="text-slate-400 font-normal">(optional)</span></label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-y"
+                />
+              </div>
+
+              {/* Price */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Price</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                <div className="flex gap-2">
+                  <select
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
+                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCat(!showNewCat)}
+                    className="w-9 h-9 flex items-center justify-center border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 transition-colors"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+                {showNewCat && (
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="New category name"
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                      className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                    <button
+                      onClick={handleAddCategory}
+                      disabled={addingCat || !newCatName.trim()}
+                      className="px-3 py-2 bg-cyan-500 text-white text-sm font-medium rounded-lg hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+                    >
+                      {addingCat ? '...' : 'Add'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* POS Centers */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">POS Centers</label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={posCenter}
+                    onChange={(e) => setPosCenter(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  <span className="text-sm text-slate-700">The Tranquil Restaurant</span>
+                </label>
+              </div>
+
+              {/* KOT */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">KOT (Kitchen Order Ticket)</label>
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="kot" checked={kot} onChange={() => setKot(true)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
+                    <span className="text-sm text-slate-700">Yes</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="kot" checked={!kot} onChange={() => setKot(false)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
+                    <span className="text-sm text-slate-700">No</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* BOT */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">BOT (Bar Order Ticket)</label>
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="bot" checked={bot} onChange={() => setBot(true)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
+                    <span className="text-sm text-slate-700">Yes</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="bot" checked={!bot} onChange={() => setBot(false)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
+                    <span className="text-sm text-slate-700">No</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Upload Image */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Upload Image</label>
+                <div
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-500 flex items-center gap-2 cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <span className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-medium text-slate-600">Choose File</span>
+                  <span>{imageFileName || 'No file chosen'}</span>
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                {imageDataUrl && (
+                  <img src={imageDataUrl} alt="preview" className="mt-2 h-20 w-20 object-cover rounded-lg border border-slate-200" />
+                )}
+              </div>
+
+              {/* Error */}
+              {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          {tab === 'manual' && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-6 py-2 text-sm font-semibold bg-slate-900 text-white rounded-lg hover:bg-black disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
