@@ -30,6 +30,7 @@ export interface Category {
 
 interface CartItem extends Product {
   quantity: number;
+  note?: string;
 }
 
 interface Order {
@@ -62,6 +63,8 @@ interface AppState {
   discount: number;
   activeOrderId: string | null;
   setUser: (user: User | null, token: string | null) => void;
+  verifyToken: () => Promise<void>;
+  logout: () => void;
   initSocket: () => void;
   fetchCategories: () => Promise<void>;
   fetchProducts: () => Promise<void>;
@@ -75,6 +78,7 @@ interface AppState {
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
+  updateCartItemNote: (productId: string, note: string) => void;
   clearCart: () => void;
   setOrderType: (type: 'table' | 'room' | 'takeaway' | 'delivery', ref: string) => void;
   setDiscount: (discount: number) => void;
@@ -91,10 +95,12 @@ export const useStore = create<AppState>((set, get) => {
       ...(options.headers as Record<string, string>),
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(url, { ...options, headers });
+    const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+    const res = await fetch(`${base}${url}`, { ...options, headers });
     if (res.status === 401) {
       localStorage.removeItem('token');
       set({ user: null, token: null, categories: [], products: [] });
+      window.location.href = '/login';
     }
     return res;
   };
@@ -118,8 +124,47 @@ export const useStore = create<AppState>((set, get) => {
     set({ user, token });
   },
 
+  verifyToken: async () => {
+    const { token, apiFetch } = get();
+    if (!token) return;
+
+    try {
+      const res = await apiFetch('/api/auth/verify');
+      if (!res.ok) {
+        localStorage.removeItem('token');
+        set({ user: null, token: null });
+      } else {
+        const data = await res.json();
+        set({ user: data.user });
+      }
+    } catch (err) {
+      localStorage.removeItem('token');
+      set({ user: null, token: null });
+    }
+  },
+
+  logout: () => {
+    localStorage.removeItem('token');
+    set({ 
+      user: null, 
+      token: null, 
+      cart: [], 
+      orders: [], 
+      categories: [], 
+      products: [],
+      discount: 0,
+      orderReference: '',
+      activeOrderId: null
+    });
+    if (get().socket) {
+      get().socket?.disconnect();
+      set({ socket: null });
+    }
+  },
+
   initSocket: () => {
-    const socket = io(window.location.origin);
+    const socketUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '');
+    const socket = io(socketUrl);
     socket.on('order:created', (order: Order) => {
       set((state) => ({ orders: [order, ...state.orders] }));
     });
@@ -258,6 +303,14 @@ export const useStore = create<AppState>((set, get) => {
         )
       };
     });
+  },
+
+  updateCartItemNote: (productId, note) => {
+    set((state) => ({
+      cart: state.cart.map((item) =>
+        item.id === productId ? { ...item, note } : item
+      )
+    }));
   },
 
   clearCart: () => set({ cart: [], discount: 0, orderReference: '' }),

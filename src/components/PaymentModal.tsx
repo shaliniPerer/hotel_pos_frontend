@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Receipt, Banknote, CreditCard, Landmark, FileCheck, PlusCircle, Trash2 } from 'lucide-react';
+import { ChevronLeft, Receipt, Banknote, CreditCard, Landmark, PlusCircle, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 import ReceiptModal from './ReceiptModal';
 
@@ -31,13 +31,12 @@ interface Props {
   onPaid: () => void;
 }
 
-type PayMethod = 'cash' | 'card' | 'online_banking' | 'check';
+type PayMethod = 'cash' | 'card' | 'online_banking';
 
 interface RecordedPayment {
   id: string;
   method: PayMethod;
   amount: number;
-  cardName?: string;
   cardNumber?: string;
 }
 
@@ -45,14 +44,12 @@ const METHODS: { key: PayMethod; label: string; icon: React.ReactNode }[] = [
   { key: 'cash',           label: 'Cash',           icon: <Banknote size={18} /> },
   { key: 'card',           label: 'Card',           icon: <CreditCard size={18} /> },
   { key: 'online_banking', label: 'Online Banking', icon: <Landmark size={18} /> },
-  { key: 'check',          label: 'Check',          icon: <FileCheck size={18} /> },
 ];
 
 const METHOD_LABEL: Record<PayMethod, string> = {
   cash: 'Cash',
   card: 'Card',
   online_banking: 'Online Banking',
-  check: 'Check',
 };
 
 export default function PaymentModal({ order, onClose, onPaid }: Props) {
@@ -60,7 +57,6 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
 
   const [currentMethod, setCurrentMethod] = useState<PayMethod>('cash');
   const [currentAmount, setCurrentAmount] = useState('');
-  const [cardName,   setCardName]   = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [recorded,   setRecorded]   = useState<RecordedPayment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -79,7 +75,7 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
   const canRecord = () => {
     const amt = parseFloat(currentAmount);
     if (!amt || amt <= 0) return false;
-    if (currentMethod === 'card' && (!cardName.trim() || !cardNumber.trim())) return false;
+    if (currentMethod === 'card' && cardNumber.length !== 4) return false;
     return true;
   };
 
@@ -92,11 +88,11 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
         id: crypto.randomUUID(),
         method: currentMethod,
         amount: amt,
-        ...(currentMethod === 'card' ? { cardName: cardName.trim(), cardNumber: cardNumber.trim() } : {}),
+        ...(currentMethod === 'card' ? { cardNumber: cardNumber.trim() } : {}),
       },
     ]);
     setCurrentAmount('');
-    if (currentMethod === 'card') { setCardName(''); setCardNumber(''); }
+    if (currentMethod === 'card') { setCardNumber(''); }
   };
 
   const handleRemove = (id: string) => setRecorded(prev => prev.filter(p => p.id !== id));
@@ -119,7 +115,6 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
           payment_details: recorded.map(p => ({
             method: p.method,
             amount: p.amount,
-            ...(p.cardName   ? { card_name:   p.cardName   } : {}),
             ...(p.cardNumber ? { card_number: p.cardNumber } : {}),
           })),
         }),
@@ -142,6 +137,7 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
       <ReceiptModal
         order={order}
         payments={recorded}
+        showPaymentDetails={true}
         onClose={() => { setShowReceipt(false); onPaid(); }}
       />
     );
@@ -209,8 +205,8 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
                       <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
                         {METHOD_LABEL[p.method]}
                       </span>
-                      {p.cardName && (
-                        <span className="text-xs text-slate-500 truncate">{p.cardName} · ****{p.cardNumber?.slice(-4)}</span>
+                      {p.cardNumber && (
+                        <span className="text-xs text-slate-500 truncate">****{p.cardNumber}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -253,31 +249,19 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
 
               {/* Card details */}
               {currentMethod === 'card' && (
-                <div className="space-y-2">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Cardholder Name <span className="text-red-400">*</span></label>
-                    <input
-                      type="text"
-                      value={cardName}
-                      onChange={e => setCardName(e.target.value)}
-                      placeholder="e.g. John Smith"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Card Number <span className="text-red-400">*</span></label>
-                    <input
-                      type="text"
-                      value={cardNumber}
-                      onChange={e => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
-                      placeholder="Last 4 digits or full card number"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-slate-800"
-                      maxLength={16}
-                    />
-                    {cardNumber.length > 0 && cardNumber.length < 4 && (
-                      <p className="text-xs text-red-400 mt-1">Enter at least 4 digits</p>
-                    )}
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Last 4 Digits of Card <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={cardNumber}
+                    onChange={e => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="e.g. 4242"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-slate-800"
+                    maxLength={4}
+                  />
+                  {cardNumber.length > 0 && cardNumber.length < 4 && (
+                    <p className="text-xs text-red-400 mt-1">Enter exactly 4 digits</p>
+                  )}
                 </div>
               )}
 

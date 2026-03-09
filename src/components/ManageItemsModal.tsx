@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { X, Pencil, Trash2, ChevronDown, Upload, Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Pencil, Trash2, ChevronDown, Plus } from 'lucide-react';
 import { useStore } from '../store';
 import type { Product } from '../store';
 
@@ -13,8 +13,6 @@ type EditState = {
   price: string;
   category_id: string;
   kot: boolean;
-  bot: boolean;
-  image: string;
 };
 
 export default function ManageItemsModal({ onClose }: Props) {
@@ -33,8 +31,6 @@ export default function ManageItemsModal({ onClose }: Props) {
   const [newCatName, setNewCatName] = useState('');
   const [addingCat, setAddingCat]   = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const displayed = products.filter(p => {
     const matchesCat    = filterCat ? p.category_id === filterCat : true;
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -47,20 +43,12 @@ export default function ManageItemsModal({ onClose }: Props) {
       id: p.id, code: p.code || '', name: p.name,
       description: p.description || '',
       price: String(p.price), category_id: p.category_id,
-      kot: p.kot ?? false, bot: p.bot ?? false, image: p.image || '',
+      kot: p.kot ?? false,
     });
     setError('');
   }
 
   function cancelEdit() { setEditingId(null); setEditState(null); setError(''); }
-
-  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !editState) return;
-    const reader = new FileReader();
-    reader.onload = () => setEditState(s => s ? { ...s, image: reader.result as string } : s);
-    reader.readAsDataURL(file);
-  }
 
   async function handleSaveEdit() {
     if (!editState) return;
@@ -74,7 +62,7 @@ export default function ManageItemsModal({ onClose }: Props) {
         code: editState.code, name: editState.name.trim(),
         description: editState.description, price,
         category_id: editState.category_id,
-        kot: editState.kot, bot: editState.bot, image: editState.image,
+        kot: editState.kot,
       });
       cancelEdit();
     } catch (e: any) { setError(e.message || 'Save failed.'); }
@@ -141,7 +129,7 @@ export default function ManageItemsModal({ onClose }: Props) {
                 <th className="text-left px-6 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Item</th>
                 <th className="text-left px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Category</th>
                 <th className="text-right px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Price</th>
-                <th className="text-center px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">KOT/BOT</th>
+                <th className="text-center px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">KOT</th>
                 <th className="px-6 py-3 w-24"></th>
               </tr>
             </thead>
@@ -170,8 +158,7 @@ export default function ManageItemsModal({ onClose }: Props) {
                     <td className="px-3 py-3 text-slate-600">{categoryName(product.category_id)}</td>
                     <td className="px-3 py-3 text-right font-semibold text-slate-900">LKR {product.price.toFixed(2)}</td>
                     <td className="px-3 py-3 text-center text-xs text-slate-500">
-                      {product.kot && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded mr-1">KOT</span>}
-                      {product.bot && <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">BOT</span>}
+                      {product.kot && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">KOT</span>}
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-end gap-2">
@@ -257,23 +244,7 @@ export default function ManageItemsModal({ onClose }: Props) {
                                   <input type="checkbox" checked={editState.kot} onChange={e => setEditState(s => s ? { ...s, kot: e.target.checked } : s)} className="rounded" />
                                   <span className="text-sm text-slate-700">KOT</span>
                                 </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input type="checkbox" checked={editState.bot} onChange={e => setEditState(s => s ? { ...s, bot: e.target.checked } : s)} className="rounded" />
-                                  <span className="text-sm text-slate-700">BOT</span>
-                                </label>
                               </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-slate-500 mb-1">Item Image</label>
-                              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                              <button onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition-colors w-full justify-center">
-                                <Upload size={16} />
-                                {editState.image ? 'Change Image' : 'Upload Image'}
-                              </button>
-                              {editState.image && (
-                                <img src={editState.image} alt="preview" className="mt-2 w-16 h-16 rounded-lg object-cover border border-slate-200" />
-                              )}
                             </div>
                           </div>
                         </div>

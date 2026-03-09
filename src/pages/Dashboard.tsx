@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
-  LayoutDashboard, ShoppingCart, LogOut, TrendingUp, DollarSign, 
+  ShoppingCart, LogOut, TrendingUp, DollarSign, 
   ReceiptText, BarChart3, Calendar, Download, FileText, CreditCard, ChefHat, ChevronDown 
 } from 'lucide-react';
 import PieChart from '../components/PieChart';
@@ -39,8 +39,9 @@ interface CategorySalesData {
 }
 
 export default function Dashboard() {
-  const { user, token, setUser, products, categories, fetchProducts, fetchCategories, apiFetch } = useStore();
+  const { user, token, logout, products, categories, fetchProducts, fetchCategories, apiFetch } = useStore();
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Real-time stats
   const [totalSales, setTotalSales] = useState(0);
@@ -51,8 +52,9 @@ export default function Dashboard() {
   const [completedOrders, setCompletedOrders] = useState(0);
 
   // Analytics data
-  const [activeTab, setActiveTab] = useState<'item_sales' | 'payments' | 'kot'>('item_sales');
-  const [dateFilter, setDateFilter] = useState<DateFilter>('today');
+  const navState = (location.state as any) || {};
+  const [activeTab, setActiveTab] = useState<'item_sales' | 'payments' | 'kot'>(navState.tab || 'item_sales');
+  const [dateFilter, setDateFilter] = useState<DateFilter>(navState.dateFilter || 'today');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -185,7 +187,7 @@ export default function Dashboard() {
   };
 
   const handleLogout = () => {
-    setUser(null, null);
+    logout();
     navigate('/login');
   };
 
@@ -254,9 +256,8 @@ export default function Dashboard() {
       {/* Sidebar */}
       <div className="w-64 bg-slate-900 text-slate-300 flex flex-col">
         <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <LayoutDashboard className="text-cyan-400" />
-            HotelMate
+          <h1 className="text-lg font-bold text-white leading-tight">
+            The Tranquil Restaurant
           </h1>
         </div>
         

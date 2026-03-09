@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Search, ShoppingBag, Plus, Minus, Trash2, CreditCard, Banknote, BedDouble, Receipt, TrendingUp, Menu, Sun, Moon, Play, Settings, ListOrdered, ChevronLeft, ChevronRight, ChevronDown, FileText, ShoppingCart, Pizza, UtensilsCrossed, Package, Home, Truck, X, Landmark, FileCheck } from 'lucide-react';
+import { LogOut, Search, ShoppingBag, Plus, Minus, Trash2, CreditCard, Banknote, BedDouble, Receipt, TrendingUp, Menu, Sun, Moon, Play, Settings, ListOrdered, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart, Pizza, UtensilsCrossed, Package, Home, Truck, X, Landmark, FileCheck, FileText } from 'lucide-react';
 import OrdersManagementModal from '../components/OrdersManagementModal';
+import ReceiptModal from '../components/ReceiptModal';
 import AddItemModal from '../components/AddItemModal';
 import CategoriesModal from '../components/CategoriesModal';
 import ManageItemsModal from '../components/ManageItemsModal';
@@ -25,7 +26,7 @@ export default function POS() {
   const { 
     user, token, categories, products, cart, orderType, orderReference, discount, activeOrderId,
     fetchCategories, fetchProducts, fetchOrders, initSocket, addToCart, removeFromCart, updateQuantity,
-    clearCart, setOrderType, setDiscount, setUser, setActiveOrderId, apiFetch
+    updateCartItemNote, clearCart, setOrderType, setDiscount, logout, setActiveOrderId, apiFetch, orders
   } = useStore();
   
   const navigate = useNavigate();
@@ -54,6 +55,11 @@ export default function POS() {
   const [showAttachItemModal, setShowAttachItemModal] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState('');
+  const [completedOrder, setCompletedOrder] = useState<any | null>(null);
+  const [completedPayments, setCompletedPayments] = useState<any[]>([]);
+  const [originalOrderItems, setOriginalOrderItems] = useState<any[]>([]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -89,6 +95,22 @@ export default function POS() {
     setIsCartOpen(true);
   };
 
+  const handleEditNote = (productId: string, currentNote: string = '') => {
+    setEditingNoteId(productId);
+    setNoteText(currentNote);
+  };
+
+  const handleSaveNote = (productId: string) => {
+    updateCartItemNote(productId, noteText);
+    setEditingNoteId(null);
+    setNoteText('');
+  };
+
+  const handleCancelNote = () => {
+    setEditingNoteId(null);
+    setNoteText('');
+  };
+
   const filteredProducts = products.filter(p => {
     const matchesCategory = activeCategory ? p.category_id === activeCategory : true;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -117,6 +139,7 @@ export default function POS() {
           discount,
           total,
           payment_method: paymentMethod,
+          paid_amount: paymentMethod === 'cash' && paidAmount ? parseFloat(paidAmount) : total,
           status: 'completed'
         })
       });
@@ -126,9 +149,12 @@ export default function POS() {
         throw new Error(err.error || `Server error ${res.status}`);
       }
       const orderData = await res.json();
+      const paidAmt = paymentMethod === 'cash' && paidAmount ? parseFloat(paidAmount) : total;
+      setCompletedPayments([{ id: '1', method: paymentMethod, amount: paidAmt }]);
       generateReceipt(orderData);
       clearCart();
       setActiveOrderId(null);
+      setOriginalOrderItems([]);
       setShowPaymentModal(false);
     } catch (error: any) {
       console.error('Checkout failed', error);
@@ -173,14 +199,11 @@ export default function POS() {
   };
 
   const generateReceipt = (order: any) => {
-    // In a real POS, this would trigger a thermal printer
-    // For now, we'll just log it or open a print dialog
-    console.log('Generating receipt for order:', order);
-    // window.print();
+    setCompletedOrder(order);
   };
 
   const handleLogout = () => {
-    setUser(null, null);
+    logout();
     navigate('/login');
   };
 
@@ -201,9 +224,8 @@ export default function POS() {
             System Date: {new Date().toISOString().split('T')[0]}
           </div>
           <div className={`flex items-center gap-4 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-            <button className={isDarkMode ? 'hover:text-white' : 'hover:text-slate-900'}><FileText size={18} /></button>
             <div className="relative">
-              <button onClick={() => setIsCartOpen(!isCartOpen)} className={isDarkMode ? 'hover:text-white' : 'hover:text-slate-900'}><ShoppingCart size={18} /></button>
+              <button onClick={() => setIsCartOpen(!isCartOpen)} className={isDarkMode ? 'hover:text-white' : 'hover:text-slate-900'}><ShoppingCart size={24} /></button>
               {cart.length > 0 && (
                 <span className={`absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 ${isDarkMode ? 'border-slate-800' : 'border-white'}`}>{cart.length}</span>
               )}
@@ -213,14 +235,14 @@ export default function POS() {
               className={isDarkMode ? 'hover:text-white' : 'hover:text-slate-900'}
               title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+              {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
             </button>
             {user?.role !== 'cashier' && (
               <>
-                <button onClick={() => navigate('/dashboard')} className="hover:text-indigo-600 ml-2" title="Dashboard & Analytics"><TrendingUp size={18} /></button>
+                <button onClick={() => navigate('/dashboard')} className="hover:text-indigo-600 ml-2" title="Dashboard & Analytics"><TrendingUp size={24} /></button>
               </>
             )}
-            <button onClick={handleLogout} className="hover:text-red-600 ml-2"><LogOut size={18} /></button>
+            <button onClick={handleLogout} className="hover:text-red-600 ml-2"><LogOut size={24} /></button>
           </div>
         </div>
       </header>
@@ -232,14 +254,27 @@ export default function POS() {
           <div className="flex items-center justify-between mb-6">
             <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>The Tranquil Restaurant</h2>
             <div className="flex items-center gap-3">
-              <button onClick={() => { fetchOrders(); setShowOrdersManagementModal(true); }} className={`h-9 px-4 rounded-lg flex items-center gap-2 text-sm font-medium shadow-sm ${isDarkMode ? 'bg-slate-700 border border-slate-600 hover:bg-slate-600 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'}`}><ListOrdered size={16} /> Orders Management</button>
+              <button
+                onClick={() => {
+                  clearCart();
+                  setActiveOrderId(null);
+                  setOriginalOrderItems([]);
+                  setActiveCategory(categories.length > 0 ? categories[0].id : null);
+                  setSearchQuery('');
+                  setIsCartOpen(false);
+                }}
+                className={`h-11 px-5 rounded-lg flex items-center gap-2 text-base font-medium shadow-sm ${isDarkMode ? 'bg-cyan-700 hover:bg-cyan-600 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'}`}
+              >
+                <Plus size={20} /> New Order
+              </button>
+              <button onClick={() => { fetchOrders(); setShowOrdersManagementModal(true); }} className={`h-11 px-5 rounded-lg flex items-center gap-2 text-base font-medium shadow-sm ${isDarkMode ? 'bg-slate-700 border border-slate-600 hover:bg-slate-600 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'}`}><ListOrdered size={20} /> Orders Management</button>
               {/* Action dropdown */}
               <div className="relative" ref={actionMenuRef}>
                 <button
                   onClick={() => setShowActionMenu(v => !v)}
-                  className="h-9 px-4 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 text-sm font-medium hover:bg-slate-50 text-slate-700 shadow-sm"
+                  className="h-11 px-5 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 text-base font-medium hover:bg-slate-50 text-slate-700 shadow-sm"
                 >
-                  <Settings size={16} /> Action <ChevronDown size={14} className={`transition-transform ${showActionMenu ? 'rotate-180' : ''}`} />
+                  <Settings size={20} /> Action <ChevronDown size={16} className={`transition-transform ${showActionMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showActionMenu && (
                   <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
@@ -294,9 +329,9 @@ export default function POS() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               <button
                 onClick={() => setShowAddItemModal(true)}
-                className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 transition-colors h-full min-h-[260px] ${isDarkMode ? 'border-slate-600 bg-slate-800 hover:bg-slate-700' : 'border-slate-300 bg-white hover:bg-slate-50'}`}>
-                <Plus size={32} className={isDarkMode ? 'text-slate-500 mb-2' : 'text-slate-400 mb-2'} />
-                <span className={`font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Add Item</span>
+                className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 transition-colors h-full min-h-[360px] ${isDarkMode ? 'border-slate-600 bg-slate-800 hover:bg-slate-700' : 'border-slate-300 bg-white hover:bg-slate-50'}`}>
+                <Plus size={48} className={isDarkMode ? 'text-slate-500 mb-3' : 'text-slate-400 mb-3'} />
+                <span className={`font-bold text-lg ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>+ Add</span>
               </button>
               {filteredProducts.map(product => (
                 <div key={product.id} className={`border rounded-xl p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow h-full min-h-[260px] ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
@@ -310,8 +345,8 @@ export default function POS() {
                   <h3 className={`font-bold text-[13px] leading-tight mb-1 line-clamp-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{product.name}</h3>
                   <p className={`text-[11px] mb-2 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>code - {product.code || product.id.slice(0,4).toUpperCase()}</p>
                   <p className={`font-bold text-base mb-3 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{product.price.toFixed(2)}</p>
-                  <button onClick={() => handleAddToCart(product)} className={`mt-auto w-full py-2 border rounded-lg flex items-center justify-center gap-1.5 text-sm font-medium ${isDarkMode ? 'border-slate-600 hover:bg-slate-700 text-slate-200' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
-                    <Plus size={14} /> Add
+                  <button onClick={() => handleAddToCart(product)} className={`mt-auto w-full py-3 border rounded-lg flex items-center justify-center gap-2 text-base font-semibold ${isDarkMode ? 'border-slate-600 hover:bg-slate-700 text-slate-200' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
+                    <Plus size={20} /> Add
                   </button>
                 </div>
               ))}
@@ -339,7 +374,12 @@ export default function POS() {
                   <div className="flex justify-between items-start mb-2">
                     <h4 className={`font-bold text-[13px] pr-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{item.name}</h4>
                     <div className="flex items-center gap-3 shrink-0">
-                      <button className={isDarkMode ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}><FileText size={14} /></button>
+                      <button 
+                        onClick={() => handleEditNote(item.id, item.note || '')}
+                        className={`${editingNoteId === item.id ? 'text-blue-500' : ''} ${isDarkMode ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <FileText size={14} />
+                      </button>
                       <div className="flex items-center gap-2">
                         <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className={isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-black'}><Minus size={14} /></button>
                         <span className="font-bold text-[13px] w-4 text-center">{item.quantity}</span>
@@ -349,6 +389,35 @@ export default function POS() {
                     </div>
                   </div>
                   <p className={`text-[13px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{item.price.toFixed(2)} &times; {item.quantity}</p>
+                  
+                  {editingNoteId === item.id ? (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        placeholder="Add note (e.g., No onions)"
+                        className={`flex-1 px-2 py-1 text-xs rounded border ${isDarkMode ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-white border-slate-300'}`}
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleSaveNote(item.id)}
+                        className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancelNote}
+                        className={`px-2 py-1 text-xs rounded ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300'}`}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : item.note ? (
+                    <p className={`text-xs italic mt-2 pl-2 border-l-2 border-blue-400 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {item.note}
+                    </p>
+                  ) : null}
                 </div>
               ))
             )}
@@ -377,10 +446,21 @@ export default function POS() {
             </div>
             <button 
               disabled={cart.length === 0} 
-              onClick={() => setShowDeliveryModal(true)} 
+              onClick={async () => {
+                if (activeOrderId) {
+                  // Editing existing order — skip delivery modal, save & show KOT directly
+                  const saved = await handleSaveOrder(orderType, orderReference);
+                  if (saved) {
+                    setCurrentOrderNumber(orderReference || `KOT-${Date.now()}`);
+                    setShowKOTModal(true);
+                  }
+                } else {
+                  setShowDeliveryModal(true);
+                }
+              }} 
               className="w-full py-3.5 bg-[#141414] text-white rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-black disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
             >
-              <CreditCard size={18} /> Checkout
+              <CreditCard size={18} /> {activeOrderId ? 'Update KOT' : 'Checkout'}
             </button>
           </div>
         </div>
@@ -468,11 +548,25 @@ export default function POS() {
 
                     <div>
                       <label className="block text-sm font-medium text-slate-400 mb-2">Running Tables</label>
-                      <div className="flex gap-3">
-                        <button className="px-6 py-2.5 bg-black text-white rounded-lg font-medium text-sm">Table 11</button>
-                        <button className="px-6 py-2.5 bg-black text-white rounded-lg font-medium text-sm">Table 5</button>
+                      <div className="flex flex-wrap gap-2">
+                        {(() => {
+                          const occupiedTables = orders
+                            .filter(o => o.type === 'table' && o.status === 'active')
+                            .map(o => o.reference);
+                          return occupiedTables.length === 0
+                            ? <span className="text-sm text-slate-400">No tables occupied</span>
+                            : occupiedTables.map((tbl, i) => (
+                              <span key={i} className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium text-sm">{tbl}</span>
+                            ));
+                        })()}
                       </div>
                     </div>
+
+                    {tableNo && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo) && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 font-medium">
+                        ⚠ Table {tableNo} is already occupied. Please choose a different table or finish/void the existing order first.
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -519,6 +613,12 @@ export default function POS() {
                     deliveryMethod === 'room_service' ? roomNo :
                     deliveryMethod === 'takeaway' ? phone :
                     `${phone} - ${customerName} - ${customerAddress}`;
+
+                  // Block if table is already occupied
+                  if (type === 'table' && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo)) {
+                    return;
+                  }
+
                   setOrderType(type as any, reference);
                   setCurrentOrderNumber(`DOC-${Date.now()}`);
                   const saved = await handleSaveOrder(type, reference);
@@ -527,7 +627,8 @@ export default function POS() {
                     setShowKOTModal(true);
                   }
                 }}
-                className="px-6 py-2.5 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors"
+                disabled={deliveryMethod === 'dine_in' && !!tableNo && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo)}
+                className="px-6 py-2.5 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
               >
                 Continue
               </button>
@@ -571,15 +672,49 @@ export default function POS() {
                 </div>
                 <div className="border-b border-dashed border-black mb-2"></div>
                 <div className="space-y-3 mb-4">
-                  {cart.map(item => (
-                    <div key={item.id}>
-                      <div className="flex justify-between">
-                        <span className="font-bold">{item.code || item.id.slice(0,4).toUpperCase()}</span>
-                        <span className="font-bold text-lg">{item.quantity}</span>
-                      </div>
-                      <div className="font-bold uppercase">{item.name}</div>
-                    </div>
-                  ))}
+                  {(() => {
+                    const isEditing = !!activeOrderId && originalOrderItems.length > 0;
+                    const removedItems = isEditing
+                      ? originalOrderItems.filter(orig => !cart.some(item => item.id === orig.product_id))
+                      : [];
+                    return (
+                      <>
+                        {cart.map(item => {
+                          const isNew = isEditing && !originalOrderItems.some(orig => orig.product_id === item.id);
+                          return (
+                            <div key={item.id}>
+                              <div className="flex justify-between">
+                                <span className="font-bold">{item.code || item.id.slice(0,4).toUpperCase()}</span>
+                                <span className="font-bold text-lg">{item.quantity}</span>
+                              </div>
+                              <div className="font-bold uppercase">{item.name}</div>
+                              {isNew && (
+                                <div className="text-xs italic mt-1 pl-2">** Newly Added Item **</div>
+                              )}
+                              {item.note && (
+                                <div className="text-xs italic mt-1 pl-2">Note: {item.note}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {removedItems.length > 0 && (
+                          <>
+                            <div className="border-b border-dashed border-black my-2"></div>
+                            {removedItems.map((orig: any, idx: number) => (
+                              <div key={idx}>
+                                <div className="flex justify-between">
+                                  <span className="font-bold">{orig.code || orig.product_id?.slice(0,4).toUpperCase()}</span>
+                                  <span className="font-bold text-lg">{orig.quantity}</span>
+                                </div>
+                                <div className="font-bold uppercase">{orig.product_name}</div>
+                                <div className="text-xs italic mt-1 pl-2">** Remove This Item **</div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="border-b border-dashed border-black mb-1"></div>
                 <div className="border-b border-dashed border-black mb-2"></div>
@@ -645,8 +780,18 @@ export default function POS() {
             <div className="mx-5 mb-4 px-4 py-2.5 bg-slate-50 rounded-xl flex items-center justify-between">
               <span className="text-sm font-bold text-slate-900">Total: LKR {total.toFixed(2)}</span>
               <span className="text-xs text-slate-500">
-                Paid: {paidAmount ? Math.max(0, parseFloat(paidAmount) || 0).toFixed(2) : '0.00'}
-                {' | '}Remaining: {paidAmount ? Math.max(0, total - (parseFloat(paidAmount) || 0)).toFixed(2) : total.toFixed(2)}
+                {paidAmount && parseFloat(paidAmount) >= total ? (
+                  <>
+                    Paid: {parseFloat(paidAmount).toFixed(2)}
+                    {' | '}
+                    <span className="text-emerald-600 font-semibold">Change: {(parseFloat(paidAmount) - total).toFixed(2)}</span>
+                  </>
+                ) : (
+                  <>
+                    Paid: {paidAmount ? Math.max(0, parseFloat(paidAmount) || 0).toFixed(2) : '0.00'}
+                    {' | '}Remaining: {paidAmount ? Math.max(0, total - (parseFloat(paidAmount) || 0)).toFixed(2) : total.toFixed(2)}
+                  </>
+                )}
               </span>
             </div>
 
@@ -690,8 +835,15 @@ export default function POS() {
                   className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
                 />
                 {paidAmount && parseFloat(paidAmount) >= total && (
-                  <p className="text-xs text-emerald-600 mt-1 font-medium">
-                    Change: LKR {(parseFloat(paidAmount) - total).toFixed(2)}
+                  <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <p className="text-sm text-emerald-700 font-bold">
+                      Change to Return: LKR {(parseFloat(paidAmount) - total).toFixed(2)}
+                    </p>
+                  </div>
+                )}
+                {paidAmount && parseFloat(paidAmount) < total && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">
+                    Insufficient amount. Still need: LKR {(total - parseFloat(paidAmount)).toFixed(2)}
                   </p>
                 )}
               </div>
@@ -714,6 +866,8 @@ export default function POS() {
         isOpen={showOrdersManagementModal} 
         onClose={() => setShowOrdersManagementModal(false)}
         initialType={orderType}
+        onEditOrder={(order) => setOriginalOrderItems(order.items || [])}
+        onOpenDetails={() => navigate('/dashboard', { state: { tab: 'kot', dateFilter: 'today' } })}
       />
 
       {showAddItemModal && (
@@ -733,6 +887,15 @@ export default function POS() {
 
       {showAttachItemModal && (
         <AttachItemModal onClose={() => setShowAttachItemModal(false)} />
+      )}
+
+      {completedOrder && (
+        <ReceiptModal
+          order={completedOrder}
+          payments={completedPayments}
+          showPaymentDetails={true}
+          onClose={() => setCompletedOrder(null)}
+        />
       )}
     </>
   );

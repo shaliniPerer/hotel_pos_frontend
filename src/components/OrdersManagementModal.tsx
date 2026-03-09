@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, Eye, PlaySquare, ShoppingCart, CreditCard, Printer } from 'lucide-react';
+import { X, Eye, ShoppingCart, CreditCard, Printer, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 import PaymentModal from './PaymentModal';
+import ReceiptModal from './ReceiptModal';
 
 interface OrdersManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialType?: 'table' | 'room' | 'takeaway' | 'delivery';
+  onEditOrder?: (order: any) => void;
+  onOpenDetails?: () => void;
 }
 
 function typeToDeliveryMethod(type?: string): 'dine_in' | 'room_service' | 'takeaway' | 'delivery' {
@@ -19,13 +22,18 @@ function typeToDeliveryMethod(type?: string): 'dine_in' | 'room_service' | 'take
   }
 }
 
-export default function OrdersManagementModal({ isOpen, onClose, initialType }: OrdersManagementModalProps) {
-  const { orders, loadOrderIntoCart } = useStore();
+export default function OrdersManagementModal({ isOpen, onClose, initialType, onEditOrder, onOpenDetails }: OrdersManagementModalProps) {
+  const { orders, loadOrderIntoCart, apiFetch, fetchOrders } = useStore();
   const [deliveryMethod, setDeliveryMethod] = useState<'dine_in' | 'room_service' | 'takeaway' | 'delivery'>(
     typeToDeliveryMethod(initialType)
   );
   const [status, setStatus] = useState<'active' | 'finished' | 'void'>('active');
   const [payingOrder, setPayingOrder] = useState<any | null>(null);
+  const [printOrder, setPrintOrder] = useState<any | null>(null);
+  const [voidOrderId, setVoidOrderId] = useState<string | null>(null);
+  const [voidPassword, setVoidPassword] = useState('');
+  const [voidPasswordError, setVoidPasswordError] = useState('');
+  const [voidLoading, setVoidLoading] = useState(false);
 
   // Sync tab to match the order type that just triggered the modal
   useEffect(() => {
@@ -58,8 +66,52 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType }: 
   );
 
   const handleEditOrder = (order: any) => {
+    if (onEditOrder) onEditOrder(order);
     loadOrderIntoCart(order);
     onClose();
+  };
+
+  const handleVoidOrder = async (orderId: string) => {
+    setVoidOrderId(orderId);
+    setVoidPassword('');
+    setVoidPasswordError('');
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('Permanently delete this record? This cannot be undone.')) return;
+    try {
+      const res = await apiFetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete order');
+      await fetchOrders();
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      alert('Failed to delete order. Please try again.');
+    }
+  };
+
+  const confirmVoidOrder = async () => {
+    if (voidPassword !== '7788') {
+      setVoidPasswordError('Incorrect password. Please try again.');
+      return;
+    }
+    if (!voidOrderId) return;
+    setVoidLoading(true);
+    try {
+      const res = await apiFetch(`/api/orders/${voidOrderId}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) throw new Error('Failed to void order');
+      await fetchOrders();
+      setStatus('void');
+      setVoidOrderId(null);
+      setVoidPassword('');
+    } catch (error) {
+      console.error('Error voiding order:', error);
+      setVoidPasswordError('Failed to void order. Please try again.');
+    } finally {
+      setVoidLoading(false);
+    }
   };
 
   return (
@@ -75,33 +127,17 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType }: 
             <p className="text-slate-500 mt-1">Manage tables and current orders</p>
           </div>
           <div className="flex items-center gap-4 pr-8">
-            <button className="h-10 px-4 bg-white border border-slate-200 rounded-lg flex items-center gap-2 text-sm font-medium hover:bg-slate-50 text-slate-700 shadow-sm">
+            <button
+              onClick={() => { onClose(); onOpenDetails && onOpenDetails(); }}
+              className="h-10 px-4 bg-white border border-slate-200 rounded-lg flex items-center gap-2 text-sm font-medium hover:bg-slate-50 text-slate-700 shadow-sm"
+            >
               <Eye size={18} /> Open Orders Details
-            </button>
-            <button className="w-10 h-10 bg-cyan-200 text-cyan-800 rounded-full flex items-center justify-center hover:bg-cyan-300 transition-colors">
-              <PlaySquare size={18} fill="currentColor" />
             </button>
           </div>
         </div>
 
         {/* Content */}
         <div className="p-6 overflow-y-auto custom-scrollbar bg-slate-50/50 flex-1">
-          {/* Legend */}
-          <div className="flex items-center gap-6 mb-6">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-              <span className="text-sm font-medium text-slate-700">Available</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500"></div>
-              <span className="text-sm font-medium text-slate-700">Occupied</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-              <span className="text-sm font-medium text-slate-700">Reserved</span>
-            </div>
-          </div>
-
           {/* Delivery Methods Tabs */}
           <div className="bg-slate-100 p-1 rounded-xl flex mb-4">
             <button
@@ -193,7 +229,8 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType }: 
                     <span className={`px-3 py-0.5 text-xs font-medium rounded-full ${
                       order.status === 'active' ? 'bg-yellow-100 text-yellow-700' :
                       order.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                      'bg-red-100 text-red-700'
+                      order.status === 'void' ? 'bg-red-100 text-red-700' :
+                      'bg-slate-100 text-slate-700'
                     }`}>
                       {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                     </span>
@@ -240,9 +277,20 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType }: 
                   </div>
                   
                   <div className="flex justify-center gap-6 text-slate-600 pb-2">
-                    <button onClick={() => handleEditOrder(order)} className="hover:text-slate-900 transition-colors" title="Edit Order"><ShoppingCart size={20} /></button>
-                    <button onClick={() => setPayingOrder(order)} className="hover:text-emerald-600 transition-colors" title="Payment"><CreditCard size={20} /></button>
-                    <button className="hover:text-slate-900 transition-colors" title="Print KOT"><Printer size={20} /></button>
+                    {status === 'active' && (
+                      <>
+                        <button onClick={() => handleEditOrder(order)} className="hover:text-slate-900 transition-colors" title="Edit Order"><ShoppingCart size={20} /></button>
+                        <button onClick={() => setPayingOrder(order)} className="hover:text-emerald-600 transition-colors" title="Payment"><CreditCard size={20} /></button>
+                        <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
+                        <button onClick={() => handleVoidOrder(order.id)} className="hover:text-red-600 transition-colors" title="Delete/Void KOT"><Trash2 size={20} /></button>
+                      </>
+                    )}
+                    {(status === 'finished' || status === 'void') && (
+                      <>
+                        <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
+                        <button onClick={() => handleDeleteOrder(order.id)} className="hover:text-red-600 transition-colors" title="Delete Record"><Trash2 size={20} /></button>
+                      </>
+                    )}
                   </div>
                   
                   <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-slate-200 border-4 border-white"></div>
@@ -259,6 +307,62 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType }: 
           onClose={() => setPayingOrder(null)}
           onPaid={() => { setPayingOrder(null); setStatus('finished'); }}
         />
+      )}
+
+      {printOrder && (
+        <ReceiptModal
+          order={printOrder}
+          payments={[
+            {
+              id: '1',
+              method: printOrder.payment_method || 'cash',
+              amount: printOrder.total || 0,
+            }
+          ]}
+          onClose={() => setPrintOrder(null)}
+        />
+      )}
+
+      {/* Void Password Modal */}
+      {voidOrderId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Confirm Void KOT</h3>
+              <button onClick={() => { setVoidOrderId(null); setVoidPassword(''); setVoidPasswordError(''); }} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">Enter the manager password to void this order. This action cannot be undone.</p>
+            <input
+              type="password"
+              value={voidPassword}
+              onChange={e => { setVoidPassword(e.target.value); setVoidPasswordError(''); }}
+              onKeyDown={e => e.key === 'Enter' && confirmVoidOrder()}
+              placeholder="Enter password"
+              autoFocus
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 mb-3 text-center text-2xl tracking-widest"
+            />
+            {voidPasswordError && (
+              <p className="text-sm text-red-600 font-medium mb-3">{voidPasswordError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setVoidOrderId(null); setVoidPassword(''); setVoidPasswordError(''); }}
+                className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmVoidOrder}
+                disabled={voidLoading || !voidPassword}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:bg-slate-300 transition-colors"
+              >
+                {voidLoading ? 'Voiding...' : 'Confirm Void'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

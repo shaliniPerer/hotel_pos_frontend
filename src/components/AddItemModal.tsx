@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { X, Plus, Upload } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Plus } from 'lucide-react';
 import { useStore } from '../store';
 
 interface Props {
@@ -7,14 +7,11 @@ interface Props {
   onSaved: () => void;
 }
 
-type Tab = 'manual' | 'excel';
-
 export default function AddItemModal({ onClose, onSaved }: Props) {
   const { categories } = useStore();
   const addProduct = useStore((s) => s.addProduct);
   const addCategory = useStore((s) => s.addCategory);
 
-  const [tab, setTab] = useState<Tab>('manual');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,25 +23,11 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
   const [categoryId, setCategoryId] = useState('');
   const [posCenter, setPosCenter] = useState(true);
   const [kot, setKot] = useState(false);
-  const [bot, setBot] = useState(false);
-  const [imageDataUrl, setImageDataUrl] = useState('');
-  const [imageFileName, setImageFileName] = useState('');
 
   // Inline new-category creation
   const [showNewCat, setShowNewCat] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [addingCat, setAddingCat] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => setImageDataUrl(reader.result as string);
-    reader.readAsDataURL(file);
-  };
 
   const handleAddCategory = async () => {
     if (!newCatName.trim()) return;
@@ -78,9 +61,8 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
         description,
         price: Number(price),
         category_id: categoryId,
-        image: imageDataUrl,
+        image: '',
         kot,
-        bot,
       });
       onSaved();
       onClose();
@@ -103,31 +85,8 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="mx-6 mb-4 flex rounded-lg bg-slate-100 p-1 shrink-0">
-          <button
-            onClick={() => setTab('manual')}
-            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${tab === 'manual' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Add Manual Item
-          </button>
-          <button
-            onClick={() => setTab('excel')}
-            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${tab === 'excel' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Import Excel
-          </button>
-        </div>
-
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 pb-2 space-y-4">
-          {tab === 'excel' ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-3">
-              <Upload size={40} className="opacity-40" />
-              <p className="text-sm">Excel import coming soon</p>
-            </div>
-          ) : (
-            <>
               {/* Item Code */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Item Code</label>
@@ -246,41 +205,8 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
                 </div>
               </div>
 
-              {/* BOT */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">BOT (Bar Order Ticket)</label>
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="bot" checked={bot} onChange={() => setBot(true)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
-                    <span className="text-sm text-slate-700">Yes</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="bot" checked={!bot} onChange={() => setBot(false)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
-                    <span className="text-sm text-slate-700">No</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Upload Image */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Upload Image</label>
-                <div
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-500 flex items-center gap-2 cursor-pointer hover:bg-slate-50 transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <span className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-medium text-slate-600">Choose File</span>
-                  <span>{imageFileName || 'No file chosen'}</span>
-                </div>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-                {imageDataUrl && (
-                  <img src={imageDataUrl} alt="preview" className="mt-2 h-20 w-20 object-cover rounded-lg border border-slate-200" />
-                )}
-              </div>
-
               {/* Error */}
               {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
-            </>
-          )}
         </div>
 
         {/* Footer */}
@@ -291,15 +217,13 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
           >
             Cancel
           </button>
-          {tab === 'manual' && (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-2 text-sm font-semibold bg-slate-900 text-white rounded-lg hover:bg-black disabled:opacity-50 transition-colors"
-            >
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2 text-sm font-semibold bg-slate-900 text-white rounded-lg hover:bg-black disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
         </div>
       </div>
     </div>
