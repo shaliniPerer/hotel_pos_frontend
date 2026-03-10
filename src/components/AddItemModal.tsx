@@ -176,20 +176,6 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
                 )}
               </div>
 
-              {/* POS Centers */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">POS Centers</label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={posCenter}
-                    onChange={(e) => setPosCenter(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-                  />
-                  <span className="text-sm text-slate-700">The Tranquil Restaurant</span>
-                </label>
-              </div>
-
               {/* KOT */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">KOT (Kitchen Order Ticket)</label>
