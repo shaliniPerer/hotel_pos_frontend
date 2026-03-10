@@ -190,11 +190,11 @@ export default function POS() {
       const orderData = await res.json();
       setActiveOrderId(orderData.id);
       await fetchOrders();
-      return true;
+      return orderData;
     } catch (error: any) {
       console.error('Save order failed', error);
       alert('Failed to save order: ' + error.message);
-      return false;
+      return null;
     }
   };
 
@@ -451,7 +451,7 @@ export default function POS() {
                   // Editing existing order — skip delivery modal, save & show KOT directly
                   const saved = await handleSaveOrder(orderType, orderReference);
                   if (saved) {
-                    setCurrentOrderNumber(orderReference || `KOT-${Date.now()}`);
+                    setCurrentOrderNumber(saved.order_number ? `KOT-${String(saved.order_number).padStart(3, '0')}` : `KOT-${orderReference}`);
                     setShowKOTModal(true);
                   }
                 } else {
@@ -620,9 +620,9 @@ export default function POS() {
                   }
 
                   setOrderType(type as any, reference);
-                  setCurrentOrderNumber(`DOC-${Date.now()}`);
                   const saved = await handleSaveOrder(type, reference);
                   if (saved) {
+                    setCurrentOrderNumber(saved.order_number ? `KOT-${String(saved.order_number).padStart(3, '0')}` : `KOT-${reference}`);
                     setShowDeliveryModal(false);
                     setShowKOTModal(true);
                   }
