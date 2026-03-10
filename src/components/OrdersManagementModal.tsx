@@ -34,6 +34,10 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
   const [voidPassword, setVoidPassword] = useState('');
   const [voidPasswordError, setVoidPasswordError] = useState('');
   const [voidLoading, setVoidLoading] = useState(false);
+  const [deleteVoidOrderId, setDeleteVoidOrderId] = useState<string | null>(null);
+  const [deleteVoidPassword, setDeleteVoidPassword] = useState('');
+  const [deleteVoidPasswordError, setDeleteVoidPasswordError] = useState('');
+  const [deleteVoidLoading, setDeleteVoidLoading] = useState(false);
 
   // Sync tab to match the order type that just triggered the modal
   useEffect(() => {
@@ -285,10 +289,15 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
                         <button onClick={() => handleVoidOrder(order.id)} className="hover:text-red-600 transition-colors" title="Delete/Void KOT"><Trash2 size={20} /></button>
                       </>
                     )}
-                    {(status === 'finished' || status === 'void') && (
+                    {status === 'finished' && (
                       <>
                         <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
-                        <button onClick={() => handleDeleteOrder(order.id)} className="hover:text-red-600 transition-colors" title="Delete Record"><Trash2 size={20} /></button>
+                      </>
+                    )}
+                    {status === 'void' && (
+                      <>
+                        <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
+                        <button onClick={() => { setDeleteVoidOrderId(order.id); setDeleteVoidPassword(''); setDeleteVoidPasswordError(''); }} className="hover:text-red-600 transition-colors" title="Delete Void Record"><Trash2 size={20} /></button>
                       </>
                     )}
                   </div>
@@ -321,6 +330,72 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
           ]}
           onClose={() => setPrintOrder(null)}
         />
+      )}
+
+      {/* Delete Void Password Modal */}
+      {deleteVoidOrderId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Delete Void Order</h3>
+              <button onClick={() => { setDeleteVoidOrderId(null); setDeleteVoidPassword(''); setDeleteVoidPasswordError(''); }} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">Enter the manager password to permanently delete this void order. This cannot be undone.</p>
+            <input
+              type="password"
+              value={deleteVoidPassword}
+              onChange={e => { setDeleteVoidPassword(e.target.value); setDeleteVoidPasswordError(''); }}
+              onKeyDown={async e => {
+                if (e.key === 'Enter') {
+                  if (deleteVoidPassword !== '7788') { setDeleteVoidPasswordError('Incorrect password. Please try again.'); return; }
+                  setDeleteVoidLoading(true);
+                  try {
+                    const res = await apiFetch(`/api/orders/${deleteVoidOrderId}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error();
+                    await fetchOrders();
+                    setDeleteVoidOrderId(null);
+                    setDeleteVoidPassword('');
+                  } catch { setDeleteVoidPasswordError('Failed to delete order. Please try again.'); }
+                  finally { setDeleteVoidLoading(false); }
+                }
+              }}
+              placeholder="Enter password"
+              autoFocus
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 mb-3 text-center text-2xl tracking-widest"
+            />
+            {deleteVoidPasswordError && (
+              <p className="text-sm text-red-600 font-medium mb-3">{deleteVoidPasswordError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDeleteVoidOrderId(null); setDeleteVoidPassword(''); setDeleteVoidPasswordError(''); }}
+                className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (deleteVoidPassword !== '7788') { setDeleteVoidPasswordError('Incorrect password. Please try again.'); return; }
+                  setDeleteVoidLoading(true);
+                  try {
+                    const res = await apiFetch(`/api/orders/${deleteVoidOrderId}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error();
+                    await fetchOrders();
+                    setDeleteVoidOrderId(null);
+                    setDeleteVoidPassword('');
+                  } catch { setDeleteVoidPasswordError('Failed to delete order. Please try again.'); }
+                  finally { setDeleteVoidLoading(false); }
+                }}
+                disabled={deleteVoidLoading || !deleteVoidPassword}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:bg-slate-300 transition-colors"
+              >
+                {deleteVoidLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Void Password Modal */}
