@@ -10,7 +10,7 @@ import ManageItemsModal from '../components/ManageItemsModal';
 import AttachItemModal from '../components/AttachItemModal';
 
 const PizzaPlaceholder = () => (
-  <svg viewBox="0 0 100 100" className="w-24 h-24 text-slate-300" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 100 100" className="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M50 50 L95 50 A 45 45 0 1 1 50 5 Z" />
     <path d="M55 45 L55 0 A 45 45 0 0 1 100 45 Z" />
     <circle cx="30" cy="30" r="4" />
@@ -48,6 +48,8 @@ export default function POS() {
   const [paidAmount, setPaidAmount] = useState('');
 
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [showKOTBillsModal, setShowKOTBillsModal] = useState(false);
+  const [selectedKOTOrder, setSelectedKOTOrder] = useState<any | null>(null);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
@@ -55,6 +57,13 @@ export default function POS() {
   const [showAttachItemModal, setShowAttachItemModal] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollCategories = (dir: 'left' | 'right') => {
+    if (categoryScrollRef.current) {
+      categoryScrollRef.current.scrollBy({ left: dir === 'left' ? -160 : 160, behavior: 'smooth' });
+    }
+  };
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
@@ -85,9 +94,7 @@ export default function POS() {
   }, [token]);
 
   useEffect(() => {
-    if (categories.length > 0 && !activeCategory) {
-      setActiveCategory(categories[0].id);
-    }
+    // keep activeCategory as null so "All" is selected by default
   }, [categories]);
 
   const handleAddToCart = (product: any) => {
@@ -113,7 +120,8 @@ export default function POS() {
 
   const filteredProducts = products.filter(p => {
     const matchesCategory = activeCategory ? p.category_id === activeCategory : true;
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
     const isVisible = p.visible !== false;
     return matchesCategory && matchesSearch && isVisible;
   });
@@ -218,8 +226,8 @@ export default function POS() {
             <span className="text-[9px] bg-cyan-400 text-white px-1.5 py-0.5 rounded uppercase font-bold tracking-wider w-fit mt-0.5">The Tranquil</span>
           </div>
         </div>
-        <div className="flex items-center gap-6">
-          <div className={`flex items-center gap-2 text-sm font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+        <div className="flex items-center gap-4 sm:gap-6">
+          <div className={`hidden sm:flex items-center gap-2 text-sm font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
             <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
             System Date: {new Date().toISOString().split('T')[0]}
           </div>
@@ -249,32 +257,32 @@ export default function POS() {
 
       <div className={`flex flex-1 overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-slate-50/50'}`}>
         {/* Left Panel */}
-        <div className="flex-1 flex flex-col overflow-hidden p-6">
+        <div className="flex-1 flex flex-col overflow-hidden p-3 sm:p-6">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>The Tranquil Restaurant</h2>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
+            <h2 className={`text-base sm:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>The Tranquil Restaurant</h2>
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => {
                   clearCart();
                   setActiveOrderId(null);
                   setOriginalOrderItems([]);
-                  setActiveCategory(categories.length > 0 ? categories[0].id : null);
+                  setActiveCategory(null);
                   setSearchQuery('');
                   setIsCartOpen(false);
                 }}
-                className={`h-11 px-5 rounded-lg flex items-center gap-2 text-base font-medium shadow-sm ${isDarkMode ? 'bg-cyan-700 hover:bg-cyan-600 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'}`}
+                className={`h-10 px-3 sm:px-5 rounded-lg flex items-center gap-1.5 sm:gap-2 text-sm sm:text-base font-medium shadow-sm ${isDarkMode ? 'bg-cyan-700 hover:bg-cyan-600 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'}`}
               >
-                <Plus size={20} /> New Order
+                <Plus size={18} /> New Order
               </button>
-              <button onClick={() => { fetchOrders(); setShowOrdersManagementModal(true); }} className={`h-11 px-5 rounded-lg flex items-center gap-2 text-base font-medium shadow-sm ${isDarkMode ? 'bg-slate-700 border border-slate-600 hover:bg-slate-600 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'}`}><ListOrdered size={20} /> Orders Management</button>
+              <button onClick={() => { fetchOrders(); setShowOrdersManagementModal(true); }} className={`h-10 px-3 sm:px-5 rounded-lg flex items-center gap-1.5 sm:gap-2 text-sm sm:text-base font-medium shadow-sm ${isDarkMode ? 'bg-slate-700 border border-slate-600 hover:bg-slate-600 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'}`}><ListOrdered size={18} /> <span className="hidden sm:inline">Orders Management</span><span className="sm:hidden">Orders</span></button>
               {/* Action dropdown */}
               <div className="relative" ref={actionMenuRef}>
                 <button
                   onClick={() => setShowActionMenu(v => !v)}
-                  className="h-11 px-5 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 text-base font-medium hover:bg-slate-50 text-slate-700 shadow-sm"
+                  className="h-10 px-3 sm:px-5 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 text-sm sm:text-base font-medium hover:bg-slate-50 text-slate-700 shadow-sm"
                 >
-                  <Settings size={20} /> Action <ChevronDown size={16} className={`transition-transform ${showActionMenu ? 'rotate-180' : ''}`} />
+                  <Settings size={18} /> <span className="hidden sm:inline">Action</span> <ChevronDown size={14} className={`transition-transform ${showActionMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showActionMenu && (
                   <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
@@ -299,21 +307,21 @@ export default function POS() {
           </div>
 
           {/* Search & Categories */}
-          <div className="mb-6 space-y-4">
+          <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
             <div className="relative">
               <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`} size={18} />
-              <input type="text" placeholder="Search..." className={`w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 shadow-sm text-sm ${isDarkMode ? 'bg-slate-700 border border-slate-600 text-white placeholder-slate-400' : 'bg-white border border-slate-200 text-slate-900'}`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+              <input type="text" placeholder="Search..." className={`w-full pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 shadow-sm text-base ${isDarkMode ? 'bg-slate-700 border border-slate-600 text-white placeholder-slate-400' : 'bg-white border border-slate-200 text-slate-900'}`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
             </div>
             
             <div className="flex items-center gap-2">
-              <button className={`p-2 rounded-lg shadow-sm ${isDarkMode ? 'bg-slate-700 border border-slate-600 hover:bg-slate-600 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-600'}`}><ChevronLeft size={18} /></button>
-              <div className="flex-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <button onClick={() => scrollCategories('left')} className={`p-2 rounded-lg shadow-sm shrink-0 ${isDarkMode ? 'bg-slate-700 border border-slate-600 hover:bg-slate-600 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-600'}`}><ChevronLeft size={18} /></button>
+              <div ref={categoryScrollRef} className="flex-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
                 <button onClick={() => setActiveCategory(null)} className={`px-5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${!activeCategory ? (isDarkMode ? 'bg-slate-600 border-b-[3px] border-cyan-400 text-white' : 'bg-slate-100 border-b-[3px] border-slate-800 text-slate-900') : (isDarkMode ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 border border-transparent' : 'bg-white text-slate-500 hover:bg-slate-50 border border-transparent')}`}>All</button>
                 {categories.map(cat => (
                   <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`px-5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeCategory === cat.id ? (isDarkMode ? 'bg-slate-600 border-b-[3px] border-cyan-400 text-white' : 'bg-slate-100 border-b-[3px] border-slate-800 text-slate-900') : (isDarkMode ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 border border-transparent' : 'bg-white text-slate-500 hover:bg-slate-50 border border-transparent')}`}>{cat.name}</button>
                 ))}
               </div>
-              <button className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 shadow-sm"><ChevronRight size={18} /></button>
+              <button onClick={() => scrollCategories('right')} className={`p-2 rounded-lg shadow-sm shrink-0 ${isDarkMode ? 'bg-slate-700 border border-slate-600 hover:bg-slate-600 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-600'}`}><ChevronRight size={18} /></button>
               <button
                 onClick={() => setShowCategoriesModal(true)}
                 title="Manage Categories"
@@ -329,13 +337,13 @@ export default function POS() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               <button
                 onClick={() => setShowAddItemModal(true)}
-                className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 transition-colors h-full min-h-[360px] ${isDarkMode ? 'border-slate-600 bg-slate-800 hover:bg-slate-700' : 'border-slate-300 bg-white hover:bg-slate-50'}`}>
+                className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-4 sm:p-6 transition-colors h-full min-h-40 sm:min-h-90 ${isDarkMode ? 'border-slate-600 bg-slate-800 hover:bg-slate-700' : 'border-slate-300 bg-white hover:bg-slate-50'}`}>
                 <Plus size={48} className={isDarkMode ? 'text-slate-500 mb-3' : 'text-slate-400 mb-3'} />
                 <span className={`font-bold text-lg ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>+ Add</span>
               </button>
               {filteredProducts.map(product => (
-                <div key={product.id} className={`border rounded-xl p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow h-full min-h-[260px] ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
-                  <div className={`w-full aspect-square rounded-lg mb-3 flex items-center justify-center overflow-hidden border ${isDarkMode ? 'bg-slate-700 border-slate-600 text-slate-500' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
+                <div key={product.id} className={`border rounded-xl p-3 sm:p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow h-full min-h-50 sm:min-h-65 ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
+                  <div className={`w-full h-20 sm:h-24 rounded-lg mb-3 flex items-center justify-center overflow-hidden border ${isDarkMode ? 'bg-slate-700 border-slate-600 text-slate-500' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
                     {product.image ? (
                       <img src={product.image} alt={product.name} className="w-full h-full object-cover opacity-80" referrerPolicy="no-referrer" />
                     ) : (
@@ -356,10 +364,13 @@ export default function POS() {
 
         {/* Right Panel: Cart */}
         {isCartOpen && (
-          <div className={`w-[380px] border flex flex-col m-6 ml-0 rounded-xl shadow-sm shrink-0 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-            <div className={`p-5 border-b flex items-center justify-between ${isDarkMode ? 'border-slate-700' : 'border-slate-100'}`}>
+          <div className={`fixed inset-0 z-40 flex flex-col md:relative md:inset-auto md:z-auto md:w-95 md:border md:m-6 md:ml-0 md:rounded-xl md:shadow-sm md:shrink-0 ${isDarkMode ? 'bg-slate-800 md:border-slate-700' : 'bg-white md:border-slate-200'}`}>
+            <div className={`p-4 sm:p-5 border-b flex items-center justify-between ${isDarkMode ? 'border-slate-700' : 'border-slate-100'}`}>
               <h2 className={`text-xl font-bold flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}><ShoppingCart size={22} /> Cart</h2>
-              <button onClick={clearCart} className={`px-3 py-1.5 border rounded-lg text-xs font-medium ${isDarkMode ? 'border-slate-600 hover:bg-slate-700 text-slate-300' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}>Clear Cart</button>
+              <div className="flex items-center gap-2">
+                <button onClick={clearCart} className={`px-3 py-1.5 border rounded-lg text-xs font-medium ${isDarkMode ? 'border-slate-600 hover:bg-slate-700 text-slate-300' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}>Clear Cart</button>
+                <button onClick={() => setIsCartOpen(false)} className={`md:hidden p-1.5 rounded-lg ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'}`}><X size={20} /></button>
+              </div>
             </div>
           
           <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar">
@@ -470,7 +481,7 @@ export default function POS() {
 
       {/* Delivery Method Modal */}
       {showDeliveryModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 flex justify-between items-start">
               <div>
@@ -639,7 +650,7 @@ export default function POS() {
 
       {/* KOT Modal */}
       {showKOTModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 print:bg-transparent print:backdrop-blur-none">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:bg-transparent print:backdrop-blur-none print:p-0">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] print:shadow-none print:w-auto print:max-w-none">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center print:hidden">
               <h2 className="text-lg font-bold text-slate-800">KOT - {currentOrderNumber}</h2>
@@ -648,101 +659,304 @@ export default function POS() {
               </button>
             </div>
             
-            <div className="p-6 bg-slate-100 overflow-y-auto custom-scrollbar flex justify-center print:bg-white print:p-0 print:overflow-visible">
+            <div className="p-6 bg-slate-100 overflow-y-auto custom-scrollbar flex justify-center items-start print:bg-white print:p-0 print:overflow-visible">
               {/* Receipt Preview */}
-              <div id="kot-receipt" className="bg-white p-6 shadow-md w-[300px] font-mono text-sm text-black print:shadow-none print:w-full print:p-0">
-                <div className="text-center mb-4">
-                  <h1 className="text-3xl font-bold mb-2 tracking-widest">KOT</h1>
-                  <p>The Tranquil Restaurant</p>
+              <div id="kot-receipt" className="bg-white shadow-md print:shadow-none print:w-full mx-auto" style={{ width: '80mm', maxWidth: '100%', fontFamily: 'Arial, sans-serif', fontSize: '13px', padding: '20px' }}>
+                {/* Header */}
+                <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '22px', letterSpacing: '4px', marginBottom: '4px' }}>KOT</div>
+                  <div style={{ fontSize: '13px' }}>The Tranquil Restaurant</div>
                 </div>
-                <div className="border-b border-dashed border-black mb-2"></div>
-                <div className="mb-2 space-y-1">
-                  <p>Order No: {currentOrderNumber}</p>
-                  <p>{new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '')}</p>
-                  <p>Staff: {user?.name || 'Admin'}</p>
-                  {deliveryMethod === 'dine_in' && <p>Table: {tableNo}</p>}
-                  {deliveryMethod === 'room_service' && <p>Room: {roomNo}</p>}
-                  {deliveryMethod === 'takeaway' && <p>Takeaway: {phone}</p>}
-                  {deliveryMethod === 'delivery' && <p>Delivery: {phone}</p>}
+                <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
+                {/* Order info */}
+                <div style={{ marginBottom: '8px', lineHeight: '1.6' }}>
+                  <div>Order No: {currentOrderNumber}</div>
+                  <div>{new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '')}</div>
+                  <div>Staff: {user?.name || 'Admin'}</div>
+                  {deliveryMethod === 'dine_in' && <div>Table: {tableNo}</div>}
+                  {deliveryMethod === 'dine_in' && pax && <div>Pax: {pax}</div>}
+                  {deliveryMethod === 'room_service' && <div>Room: {roomNo}</div>}
+                  {deliveryMethod === 'takeaway' && <div>Takeaway: {phone}</div>}
+                  {deliveryMethod === 'delivery' && <div>Delivery: {phone}</div>}
                 </div>
-                <div className="border-b border-dashed border-black mb-2"></div>
-                <div className="flex justify-between mb-2">
+                <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
+                {/* Column headers */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', marginBottom: '6px' }}>
                   <span>ITEM</span>
                   <span>QTY</span>
                 </div>
-                <div className="border-b border-dashed border-black mb-2"></div>
-                <div className="space-y-3 mb-4">
+                <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
+                {/* Items */}
+                <div style={{ marginBottom: '10px' }}>
                   {(() => {
                     const isEditing = !!activeOrderId && originalOrderItems.length > 0;
-                    const removedItems = isEditing
-                      ? originalOrderItems.filter(orig => !cart.some(item => item.id === orig.product_id))
-                      : [];
+
+                    if (!isEditing) {
+                      // New order — show all cart items
+                      return cart.map(item => (
+                        <div key={item.id} style={{ marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                            <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
+                            <span style={{ fontSize: '15px' }}>{item.quantity}</span>
+                          </div>
+                          <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
+                          {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
+                        </div>
+                      ));
+                    }
+
+                    // Editing existing order — only show changes
+                    const addedItems: React.ReactNode[] = [];
+                    const removedLines: React.ReactNode[] = [];
+
+                    cart.forEach(item => {
+                      const orig = originalOrderItems.find((o: any) => o.product_id === item.id);
+                      if (!orig) {
+                        // Brand new item
+                        addedItems.push(
+                          <div key={item.id} style={{ marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                              <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
+                              <span style={{ fontSize: '15px' }}>{item.quantity}</span>
+                            </div>
+                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
+                            {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
+                          </div>
+                        );
+                      } else if (item.quantity > orig.quantity) {
+                        // Quantity increased — show only the additional qty
+                        const diff = item.quantity - orig.quantity;
+                        addedItems.push(
+                          <div key={item.id} style={{ marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                              <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
+                              <span style={{ fontSize: '15px' }}>+{diff}</span>
+                            </div>
+                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
+                            {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
+                          </div>
+                        );
+                      } else if (item.quantity < orig.quantity) {
+                        // Quantity decreased
+                        const diff = orig.quantity - item.quantity;
+                        removedLines.push(
+                          <div key={item.id} style={{ marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                              <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
+                              <span style={{ fontSize: '15px' }}>-{diff}</span>
+                            </div>
+                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
+                            <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>** Reduce Qty **</div>
+                          </div>
+                        );
+                      }
+                    });
+
+                    // Items fully removed from cart
+                    originalOrderItems.forEach((orig: any) => {
+                      if (!cart.some(item => item.id === orig.product_id)) {
+                        removedLines.push(
+                          <div key={orig.product_id} style={{ marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                              <span>{orig.code || orig.product_id?.slice(0,4).toUpperCase()}</span>
+                              <span style={{ fontSize: '15px' }}>-{orig.quantity}</span>
+                            </div>
+                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{orig.product_name}</div>
+                            <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>** Remove This Item **</div>
+                          </div>
+                        );
+                      }
+                    });
+
                     return (
                       <>
-                        {cart.map(item => {
-                          const isNew = isEditing && !originalOrderItems.some(orig => orig.product_id === item.id);
-                          return (
-                            <div key={item.id}>
-                              <div className="flex justify-between">
-                                <span className="font-bold">{item.code || item.id.slice(0,4).toUpperCase()}</span>
-                                <span className="font-bold text-lg">{item.quantity}</span>
-                              </div>
-                              <div className="font-bold uppercase">{item.name}</div>
-                              {isNew && (
-                                <div className="text-xs italic mt-1 pl-2">** Newly Added Item **</div>
-                              )}
-                              {item.note && (
-                                <div className="text-xs italic mt-1 pl-2">Note: {item.note}</div>
-                              )}
-                            </div>
-                          );
-                        })}
-                        {removedItems.length > 0 && (
+                        {addedItems}
+                        {removedLines.length > 0 && (
                           <>
-                            <div className="border-b border-dashed border-black my-2"></div>
-                            {removedItems.map((orig: any, idx: number) => (
-                              <div key={idx}>
-                                <div className="flex justify-between">
-                                  <span className="font-bold">{orig.code || orig.product_id?.slice(0,4).toUpperCase()}</span>
-                                  <span className="font-bold text-lg">{orig.quantity}</span>
-                                </div>
-                                <div className="font-bold uppercase">{orig.product_name}</div>
-                                <div className="text-xs italic mt-1 pl-2">** Remove This Item **</div>
-                              </div>
-                            ))}
+                            {addedItems.length > 0 && <div style={{ borderBottom: '1px dashed #000', margin: '8px 0' }}></div>}
+                            {removedLines}
                           </>
+                        )}
+                        {addedItems.length === 0 && removedLines.length === 0 && (
+                          <div style={{ textAlign: 'center', color: '#666' }}>No changes</div>
                         )}
                       </>
                     );
                   })()}
                 </div>
-                <div className="border-b border-dashed border-black mb-1"></div>
-                <div className="border-b border-dashed border-black mb-2"></div>
-                <div className="text-center text-xs flex items-center justify-center gap-2">
-                  <span>✂</span> CUT HERE
-                </div>
-                <div className="border-b border-dashed border-black mt-2"></div>
+                <div style={{ borderBottom: '1px dashed #000', marginBottom: '4px' }}></div>
+                <div style={{ borderBottom: '1px dashed #000' }}></div>
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-100 flex justify-between items-center bg-white print:hidden">
-              <p className="text-xs text-slate-500 max-w-[60%]">
+            <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white print:hidden">
+              <p className="text-xs text-slate-500 hidden sm:block max-w-[60%]">
                 For 80mm receipt printer: in the print dialog choose your receipt printer and set <strong>Paper size</strong> to <strong>80mm</strong> or Receipt so the layout prints correctly.
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-3 sm:justify-end">
                 <button
                   onClick={() => { window.print(); }}
-                  className="px-6 py-2.5 bg-[#141414] text-white rounded-lg font-medium hover:bg-black transition-colors"
+                  className="flex-1 sm:flex-none px-6 py-2.5 bg-[#141414] text-white rounded-lg font-medium hover:bg-black transition-colors"
                 >
                   Print
                 </button>
                 <button
                   onClick={async () => { await fetchOrders(); setShowKOTModal(false); setShowOrdersManagementModal(true); }}
-                  className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                  className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                 >
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KOT Bills Modal */}
+      {showKOTBillsModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                {selectedKOTOrder && (
+                  <button onClick={() => setSelectedKOTOrder(null)} className="text-slate-400 hover:text-slate-700">
+                    <ChevronLeft size={22} />
+                  </button>
+                )}
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    {selectedKOTOrder ? `KOT — ${selectedKOTOrder.order_number}` : 'KOT Bills'}
+                  </h2>
+                  {!selectedKOTOrder && <p className="text-sm text-slate-500 mt-0.5">All kitchen order tickets</p>}
+                </div>
+              </div>
+              <button onClick={() => { setShowKOTBillsModal(false); setSelectedKOTOrder(null); }} className="text-slate-400 hover:text-slate-600">
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Body — list view */}
+            {!selectedKOTOrder && (
+              <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
+                {orders.length === 0 ? (
+                  <div className="text-center py-16 text-slate-500">No KOT bills found</div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {[...orders]
+                      .filter(o => o.status === 'active')
+                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                      .map(order => {
+                        const typeLabel: Record<string, string> = {
+                          table: 'Dine-In', room: 'Room', takeaway: 'Takeaway', delivery: 'Delivery'
+                        };
+                        const refLabel: Record<string, string> = {
+                          table: 'Table', room: 'Room', takeaway: 'Takeaway', delivery: 'Delivery'
+                        };
+                        const statusColor: Record<string, string> = {
+                          active: 'bg-green-100 text-green-700',
+                          completed: 'bg-blue-100 text-blue-700',
+                          void: 'bg-red-100 text-red-700',
+                        };
+                        const dateStr = new Date(order.created_at).toLocaleString('en-GB', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit'
+                        }).replace(',', '');
+                        return (
+                          <div
+                            key={order.id}
+                            onClick={() => setSelectedKOTOrder(order)}
+                            className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col gap-1.5 shadow-sm cursor-pointer hover:border-slate-400 hover:shadow-md transition-all"
+                          >
+                            <div className="text-base font-bold text-slate-900 tracking-wide">{order.order_number}</div>
+                            <div className="text-xs text-slate-500">{dateStr}</div>
+                            <div className="text-xs font-semibold text-slate-800">
+                              {typeLabel[order.type] || order.type}
+                              {order.reference ? ` · ${refLabel[order.type] || ''} ${order.reference}`.trim() : ''}
+                            </div>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full self-start ${statusColor[order.status] || 'bg-slate-100 text-slate-600'}`}>
+                              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Body — KOT bill detail view */}
+            {selectedKOTOrder && (
+              <div className="p-6 bg-slate-100 overflow-y-auto custom-scrollbar flex-1 flex justify-center items-start">
+                <div id="kot-bills-receipt" className="bg-white shadow-md print:shadow-none print:w-full mx-auto" style={{ width: '80mm', maxWidth: '100%', fontFamily: 'Arial, sans-serif', fontSize: '13px', padding: '20px' }}>
+                  {/* Header */}
+                  <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '22px', letterSpacing: '4px', marginBottom: '4px' }}>KOT</div>
+                    <div style={{ fontSize: '13px' }}>The Tranquil Restaurant</div>
+                  </div>
+                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
+                  {/* Order info */}
+                  <div style={{ marginBottom: '8px', lineHeight: '1.6' }}>
+                    <div>Order No: {selectedKOTOrder.order_number}</div>
+                    <div>{new Date(selectedKOTOrder.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '')}</div>
+                    {selectedKOTOrder.type === 'table' && <div>Table: {selectedKOTOrder.reference}</div>}
+                    {selectedKOTOrder.type === 'room' && <div>Room: {selectedKOTOrder.reference}</div>}
+                    {selectedKOTOrder.type === 'takeaway' && <div>Takeaway: {selectedKOTOrder.reference}</div>}
+                    {selectedKOTOrder.type === 'delivery' && <div>Delivery: {selectedKOTOrder.reference}</div>}
+                  </div>
+                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
+                  {/* Column headers */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', marginBottom: '6px' }}>
+                    <span>ITEM</span>
+                    <span>QTY</span>
+                  </div>
+                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
+                  {/* Items */}
+                  <div style={{ marginBottom: '10px' }}>
+                    {(selectedKOTOrder.items || []).map((item: any) => (
+                      <div key={item.id} style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                          <span>{item.product_id?.slice(0, 4).toUpperCase()}</span>
+                          <span style={{ fontSize: '15px' }}>{item.quantity}</span>
+                        </div>
+                        <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.product_name}</div>
+                      </div>
+                    ))}
+                    {(!selectedKOTOrder.items || selectedKOTOrder.items.length === 0) && (
+                      <div style={{ textAlign: 'center', color: '#666' }}>No items</div>
+                    )}
+                  </div>
+                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '4px' }}></div>
+                  <div style={{ borderBottom: '1px dashed #000' }}></div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 flex justify-between items-center bg-white">
+              {selectedKOTOrder ? (
+                <>
+                  <button
+                    onClick={() => setSelectedKOTOrder(null)}
+                    className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="px-6 py-2.5 bg-slate-800 text-white rounded-lg font-medium hover:bg-black transition-colors"
+                  >
+                    Print
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => { setShowKOTBillsModal(false); setSelectedKOTOrder(null); }}
+                  className="ml-auto px-6 py-2.5 bg-slate-800 text-white rounded-lg font-medium hover:bg-black transition-colors"
+                >
+                  Close
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -867,7 +1081,7 @@ export default function POS() {
         onClose={() => setShowOrdersManagementModal(false)}
         initialType={orderType}
         onEditOrder={(order) => setOriginalOrderItems(order.items || [])}
-        onOpenDetails={() => navigate('/dashboard', { state: { tab: 'kot', dateFilter: 'today' } })}
+        onOpenDetails={() => { fetchOrders(); setShowOrdersManagementModal(false); setShowKOTBillsModal(true); }}
       />
 
       {showAddItemModal && (

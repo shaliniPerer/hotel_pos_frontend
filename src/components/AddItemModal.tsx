@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function AddItemModal({ onClose, onSaved }: Props) {
-  const { categories } = useStore();
+  const { categories, products } = useStore();
   const addProduct = useStore((s) => s.addProduct);
   const addCategory = useStore((s) => s.addCategory);
 
@@ -52,6 +52,10 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
     if (!name.trim()) { setError('Item Name is required.'); return; }
     if (!categoryId) { setError('Please select a category.'); return; }
     if (isNaN(Number(price)) || Number(price) < 0) { setError('Please enter a valid price.'); return; }
+    if (code.trim() && products.some(p => p.code && p.code.toLowerCase() === code.trim().toLowerCase())) {
+      setError(`Item code "${code.trim()}" is already in use. Please choose a different code.`);
+      return;
+    }
     setError('');
     setSaving(true);
     try {
@@ -93,9 +97,16 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
                 <input
                   type="text"
                   value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  onChange={(e) => { setCode(e.target.value); setError(''); }}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                    code.trim() && products.some(p => p.code && p.code.toLowerCase() === code.trim().toLowerCase())
+                      ? 'border-red-400 bg-red-50'
+                      : 'border-slate-300'
+                  }`}
                 />
+                {code.trim() && products.some(p => p.code && p.code.toLowerCase() === code.trim().toLowerCase()) && (
+                  <p className="text-xs text-red-500 mt-1">This code is already used by another item.</p>
+                )}
               </div>
 
               {/* Item Name */}

@@ -119,7 +119,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex justify-between items-start relative">
@@ -130,7 +130,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
             <h2 className="text-2xl font-bold text-slate-900">Orders Management</h2>
             <p className="text-slate-500 mt-1">Manage tables and current orders</p>
           </div>
-          <div className="flex items-center gap-4 pr-8">
+          <div className="hidden sm:flex items-center gap-4 pr-8">
             <button
               onClick={() => { onClose(); onOpenDetails && onOpenDetails(); }}
               className="h-10 px-4 bg-white border border-slate-200 rounded-lg flex items-center gap-2 text-sm font-medium hover:bg-slate-50 text-slate-700 shadow-sm"
@@ -143,7 +143,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
         {/* Content */}
         <div className="p-6 overflow-y-auto custom-scrollbar bg-slate-50/50 flex-1">
           {/* Delivery Methods Tabs */}
-          <div className="bg-slate-100 p-1 rounded-xl flex mb-4">
+          <div className="bg-slate-100 p-1 rounded-xl flex flex-wrap mb-4">
             <button
               onClick={() => setDeliveryMethod('dine_in')}
               className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
@@ -207,7 +207,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
           </div>
 
           {/* Order Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
             {displayOrders.length === 0 ? (
               <div className="col-span-full text-center py-12 text-slate-500">
                 No orders found for this category and status.
@@ -292,6 +292,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
                     {status === 'finished' && (
                       <>
                         <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
+                        <button onClick={() => handleDeleteOrder(order.id)} className="hover:text-red-600 transition-colors" title="Delete Record"><Trash2 size={20} /></button>
                       </>
                     )}
                     {status === 'void' && (
@@ -334,7 +335,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
 
       {/* Delete Void Password Modal */}
       {deleteVoidOrderId && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900">Delete Void Order</h3>
@@ -349,7 +350,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
               onChange={e => { setDeleteVoidPassword(e.target.value); setDeleteVoidPasswordError(''); }}
               onKeyDown={async e => {
                 if (e.key === 'Enter') {
-                  if (deleteVoidPassword !== '7788') { setDeleteVoidPasswordError('Incorrect password. Please try again.'); return; }
+                  if (deleteVoidPassword !== 'unique') { setDeleteVoidPasswordError('Incorrect password. Please try again.'); return; }
                   setDeleteVoidLoading(true);
                   try {
                     const res = await apiFetch(`/api/orders/${deleteVoidOrderId}`, { method: 'DELETE' });
@@ -377,7 +378,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
               </button>
               <button
                 onClick={async () => {
-                  if (deleteVoidPassword !== '7788') { setDeleteVoidPasswordError('Incorrect password. Please try again.'); return; }
+                  if (deleteVoidPassword !== 'unique') { setDeleteVoidPasswordError('Incorrect password. Please try again.'); return; }
                   setDeleteVoidLoading(true);
                   try {
                     const res = await apiFetch(`/api/orders/${deleteVoidOrderId}`, { method: 'DELETE' });
@@ -400,7 +401,7 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
 
       {/* Void Password Modal */}
       {voidOrderId && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900">Confirm Void KOT</h3>

@@ -138,6 +138,7 @@ export default function PaymentModal({ order, onClose, onPaid }: Props) {
         order={order}
         payments={recorded}
         showPaymentDetails={true}
+        hideHeaderFooter={true}
         onClose={() => { setShowReceipt(false); onPaid(); }}
       />
     );

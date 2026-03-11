@@ -3,7 +3,7 @@ import { useStore } from '../store';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   ShoppingCart, LogOut, TrendingUp, DollarSign, 
-  ReceiptText, BarChart3, Calendar, Download, FileText, CreditCard, ChefHat, ChevronDown 
+  ReceiptText, BarChart3, Calendar, Download, FileText, CreditCard, ChefHat, ChevronDown, Menu, X 
 } from 'lucide-react';
 import PieChart from '../components/PieChart';
 
@@ -43,6 +43,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   
+  const [showSidebar, setShowSidebar] = useState(false);
   // Real-time stats
   const [totalSales, setTotalSales] = useState(0);
   const [todaySales, setTodaySales] = useState(0);
@@ -253,12 +254,25 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
+      {/* Mobile Sidebar Backdrop */}
+      {showSidebar && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-64 bg-slate-900 text-slate-300 flex flex-col">
-        <div className="p-6 border-b border-slate-800">
+      <div className={`${
+        showSidebar ? 'flex' : 'hidden'
+      } md:flex flex-col w-64 bg-slate-900 text-slate-300 fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto shrink-0`}>
+        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
           <h1 className="text-lg font-bold text-white leading-tight">
             The Tranquil Restaurant
           </h1>
+          <button onClick={() => setShowSidebar(false)} className="md:hidden text-slate-400 hover:text-white">
+            <X size={18} />
+          </button>
         </div>
         
         <nav className="flex-1 p-4 space-y-2">
@@ -291,89 +305,97 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
-        <header className="bg-white border-b border-slate-200 px-8 py-6">
-          <h2 className="text-2xl font-bold text-slate-800">Dashboard & Analytics</h2>
-          <p className="text-slate-500 text-sm mt-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-4 md:py-6 flex items-center gap-3">
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="md:hidden text-slate-600 hover:text-slate-800 p-1 rounded-lg hover:bg-slate-100"
+          >
+            <Menu size={22} />
+          </button>
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-800">Dashboard & Analytics</h2>
+            <p className="text-slate-500 text-xs md:text-sm mt-0.5">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          </div>
         </header>
 
-        <main className="p-8">
+        <main className="p-4 md:p-8">
           {/* Stats Cards - 6 Cards in 1 row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-cyan-100 text-cyan-600 rounded-xl">
-                  <DollarSign size={20} />
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4 mb-6 md:mb-8">
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-cyan-100 text-cyan-600 rounded-xl">
+                  <DollarSign size={18} />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase">Total Sales</p>
-                  <p className="text-lg font-bold text-slate-800">LKR {totalSales.toFixed(2)}</p>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Total Sales</p>
+                  <p className="text-sm md:text-lg font-bold text-slate-800">LKR {totalSales.toFixed(2)}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
-                  <DollarSign size={20} />
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-emerald-100 text-emerald-600 rounded-xl">
+                  <DollarSign size={18} />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase">Today's Sales</p>
-                  <p className="text-lg font-bold text-slate-800">LKR {todaySales.toFixed(2)}</p>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Today's Sales</p>
+                  <p className="text-sm md:text-lg font-bold text-slate-800">LKR {todaySales.toFixed(2)}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-slate-100 text-slate-600 rounded-xl">
-                  <ReceiptText size={20} />
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-slate-100 text-slate-600 rounded-xl">
+                  <ReceiptText size={18} />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase">Total Orders</p>
-                  <p className="text-lg font-bold text-slate-800">{totalOrders}</p>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Total Orders</p>
+                  <p className="text-sm md:text-lg font-bold text-slate-800">{totalOrders}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-cyan-100 text-cyan-600 rounded-xl">
-                  <ReceiptText size={20} />
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-cyan-100 text-cyan-600 rounded-xl">
+                  <ReceiptText size={18} />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase">Today Orders</p>
-                  <p className="text-lg font-bold text-slate-800">{todayOrders}</p>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Today Orders</p>
+                  <p className="text-sm md:text-lg font-bold text-slate-800">{todayOrders}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-amber-100 text-amber-600 rounded-xl">
-                  <ReceiptText size={20} />
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-amber-100 text-amber-600 rounded-xl">
+                  <ReceiptText size={18} />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase">Pending</p>
-                  <p className="text-lg font-bold text-slate-800">{pendingOrders}</p>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Pending</p>
+                  <p className="text-sm md:text-lg font-bold text-slate-800">{pendingOrders}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
-                  <ReceiptText size={20} />
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-emerald-100 text-emerald-600 rounded-xl">
+                  <ReceiptText size={18} />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase">Completed</p>
-                  <p className="text-lg font-bold text-slate-800">{completedOrders}</p>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Completed</p>
+                  <p className="text-sm md:text-lg font-bold text-slate-800">{completedOrders}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Food Categories Bar Chart */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-8 p-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-6 md:mb-8 p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold text-slate-800 uppercase">Sales by Food Categories</h3>
               <div className="flex gap-2 items-center">
@@ -398,7 +420,7 @@ export default function Dashboard() {
                 
                 <div className="ml-20 h-full flex items-end justify-around gap-3">
                   {categorySalesData.map((category, idx) => (
-                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 max-w-[120px]">
+                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 max-w-30">
                       <div className="w-full flex items-end justify-center" style={{ height: `${chartHeight - 50}px` }}>
                         <div
                           className="hover:opacity-80 transition-all rounded-t cursor-pointer"
@@ -433,7 +455,7 @@ export default function Dashboard() {
           {/* Analytics Reports Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-8">
             <div className="border-b border-slate-100 px-6 py-4">
-              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
                 <h3 className="text-lg font-bold text-slate-800 uppercase">Sales Reports</h3>
                 
                 {/* Date Filter */}
@@ -511,7 +533,7 @@ export default function Dashboard() {
               </div>
               
               {/* Tabs */}
-              <div className="flex gap-4 mt-4">
+              <div className="flex flex-wrap gap-2 mt-4">
                 <button
                   onClick={() => setActiveTab('item_sales')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${

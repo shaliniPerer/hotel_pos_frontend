@@ -46,6 +46,7 @@ interface Props {
   payments: RecordedPayment[];
   onClose: () => void;
   showPaymentDetails?: boolean;
+  hideHeaderFooter?: boolean;
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -293,7 +294,7 @@ function buildPrintHtml(order: Order, payments: RecordedPayment[], staffName: st
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function ReceiptModal({ order, payments, onClose, showPaymentDetails = false }: Props) {
+export default function ReceiptModal({ order, payments, onClose, showPaymentDetails = false, hideHeaderFooter = false }: Props) {
   const { user } = useStore();
   const [printed, setPrinted] = useState(false);
   const [printedAt, setPrintedAt] = useState<Date>(new Date());
@@ -308,18 +309,25 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
   const change   = paidAmt > total ? paidAmt - total : 0;
 
   const handlePrint = () => {
-    const now = new Date();
-    setPrintedAt(now);
-    const html = buildPrintHtml(order, payments, staffName, now, showPaymentDetails);
-    const win = window.open('', '_blank', 'width=650,height=900');
-    if (!win) { alert('Please allow popups to print the receipt.'); return; }
-    win.document.write(html);
-    win.document.close();
+    setPrintedAt(new Date());
+    const style = document.createElement('style');
+    style.id = 'receipt-print-style';
+    style.textContent = `
+      @media print {
+        body { margin: 0 !important; background: white !important; }
+        body * { visibility: hidden !important; }
+        #receipt-paper, #receipt-paper * { visibility: visible !important; }
+        #receipt-paper { position: fixed !important; left: 0 !important; top: 0 !important; width: 80mm !important; box-shadow: none !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    window.print();
+    document.head.removeChild(style);
     setPrinted(true);
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-100 flex flex-col z-[70] overflow-y-auto">
+    <div id="receipt-modal-print-root" className="fixed inset-0 bg-gray-100 flex flex-col z-70 overflow-y-auto">
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between shrink-0">
@@ -348,19 +356,23 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
       </div>
 
       {/* Receipt paper */}
-      <div className="flex-1 flex justify-center px-4 py-6 bg-gray-50">
+      <div className="flex-1 flex justify-center items-start px-4 py-6 bg-gray-50">
         <div
-          className="bg-white shadow-lg rounded-sm"
-          style={{ width: '500px', fontFamily: 'Arial, sans-serif', fontSize: '14px', padding: '30px' }}
+          id="receipt-paper"
+          className="bg-white shadow-lg rounded-sm mx-auto"
+          style={{ width: '80mm', maxWidth: '100%', fontFamily: 'Arial, sans-serif', fontSize: '13px', padding: '14px', boxSizing: 'border-box' }}
         >
           {/* Business header */}
+          {!hideHeaderFooter && (
           <div style={{ textAlign: 'center', marginBottom: '20px' }}>
             <div style={{ fontWeight: 'bold', fontSize: '20px', marginBottom: '10px', lineHeight: '1.3' }}>{BIZ_NAME}</div>
             <div style={{ fontSize: '13px', marginBottom: '3px' }}>{BIZ_ADDRESS}</div>
             <div style={{ fontSize: '13px' }}>{BIZ_TEL}</div>
           </div>
+          )}
 
           {/* Receipt info */}
+          {!hideHeaderFooter && (
           <div style={{ marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '13px' }}>
               <span>Date : {formatDate(printedAt.toISOString())}</span>
@@ -371,6 +383,7 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
               <span>Staff : {staffName}</span>
             </div>
           </div>
+          )}
 
           {/* Receipt title */}
           <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '17px', margin: '20px 0' }}>
@@ -380,14 +393,14 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
           {/* Items header */}
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: '40px 1fr 60px 90px 90px', 
-            gap: '8px',
-            padding: '10px 0',
+            gridTemplateColumns: '22px 1fr 28px 52px 52px', 
+            gap: '4px',
+            padding: '8px 0',
             borderTop: '1px solid #000',
             borderBottom: '1px solid #000',
             fontWeight: 'bold',
-            fontSize: '13px',
-            marginTop: '15px'
+            fontSize: '12px',
+            marginTop: '12px'
           }}>
             <div style={{ textAlign: 'center' }}>No</div>
             <div>Item</div>
@@ -403,12 +416,13 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
                 key={item.id}
                 style={{ 
                   display: 'grid', 
-                  gridTemplateColumns: '40px 1fr 60px 90px 90px', 
-                  gap: '8px',
-                  padding: '10px 0',
+                  gridTemplateColumns: '22px 1fr 28px 52px 52px', 
+                  gap: '4px',
+                  padding: '8px 0',
                   borderBottom: '1px solid #ddd',
-                  fontSize: '13px',
-                  alignItems: 'start'
+                  fontSize: '12px',
+                  alignItems: 'start',
+                  wordBreak: 'break-word'
                 }}
               >
                 <div style={{ textAlign: 'center' }}>{String(index + 1).padStart(2, '0')}</div>
@@ -421,59 +435,60 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
           </div>
 
           {/* Totals */}
-          <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #000' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '80px', padding: '6px 0', fontSize: '13px' }}>
+          <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #000' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
               <span>Subtotal</span>
               <span>{subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             {tax > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '80px', padding: '6px 0', fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
                 <span>Service Charge (10%)</span>
-                <span>{tax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span style={{ whiteSpace: 'nowrap', marginLeft: '8px' }}>{tax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             )}
             {discount > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '80px', padding: '6px 0', fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
                 <span>Discount</span>
-                <span>-{discount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span style={{ whiteSpace: 'nowrap', marginLeft: '8px' }}>-{discount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             )}
             <div style={{ 
               display: 'flex', 
-              justifyContent: 'flex-end',
-              gap: '80px',
-              padding: '10px 0 6px 0', 
-              fontSize: '14px', 
+              justifyContent: 'space-between',
+              padding: '8px 0 4px 0', 
+              fontSize: '13px', 
               fontWeight: 'bold',
               borderTop: '1px solid #000',
-              marginTop: '8px'
+              marginTop: '6px'
             }}>
               <span>Grand Total</span>
-              <span>LKR {total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span style={{ whiteSpace: 'nowrap', marginLeft: '8px' }}>LKR {total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
 
           {/* Amount Paid & Payment Method */}
           {showPaymentDetails && (
-          <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #ddd' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '80px', padding: '6px 0', fontSize: '14px', fontWeight: 'bold' }}>
+          <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '13px', fontWeight: 'bold' }}>
               <span>Amount Paid (LKR)</span>
-              <span>{payments.reduce((s, p) => s + p.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span style={{ whiteSpace: 'nowrap', marginLeft: '8px' }}>{payments.reduce((s, p) => s + p.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
-            <div style={{ borderTop: '1px solid #eee', marginTop: '10px', paddingTop: '10px' }}>
-              <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '8px' }}>Payment Method</div>
+            <div style={{ borderTop: '1px solid #eee', marginTop: '8px', paddingTop: '8px' }}>
+              <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>Payment Method</div>
               {payments.map(p => (
-                <div key={p.id} style={{ display: 'flex', justifyContent: 'center', gap: '12px', padding: '3px 0', fontSize: '13px' }}>
-                  <span style={{ width: '120px', textAlign: 'right' }}>
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: '12px' }}>
+                  <span style={{ flex: '1', marginRight: '8px' }}>
                     {METHOD_LABEL[p.method] || p.method.toUpperCase()}{p.cardNumber ? ` (****${p.cardNumber})` : ''}
                   </span>
-                  <span style={{ width: '40px', textAlign: 'center' }}>LKR</span>
-                  <span style={{ width: '100px', textAlign: 'right' }}>{p.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>LKR {p.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               ))}
             </div>
           </div>
           )}
+
+          {/* Footer */}
+          {!hideHeaderFooter && (
           <div style={{ marginTop: '40px', textAlign: 'center' }}>
             <p style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>{BIZ_TAGLINE}</p>
             <p style={{ fontSize: '12px', marginBottom: '15px' }}>Please scan QR code to review us on Google</p>
@@ -482,6 +497,7 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
             <p style={{ fontSize: '12px', marginTop: '5px' }}>See you again!</p>
             <p style={{ fontSize: '11px', color: '#888', marginTop: '20px' }}>Powered by clickinmo.com</p>
           </div>
+          )}
         </div>
       </div>
 
