@@ -38,6 +38,10 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
   const [deleteVoidPassword, setDeleteVoidPassword] = useState('');
   const [deleteVoidPasswordError, setDeleteVoidPasswordError] = useState('');
   const [deleteVoidLoading, setDeleteVoidLoading] = useState(false);
+  const [deleteFinishedOrderId, setDeleteFinishedOrderId] = useState<string | null>(null);
+  const [deleteFinishedPassword, setDeleteFinishedPassword] = useState('');
+  const [deleteFinishedPasswordError, setDeleteFinishedPasswordError] = useState('');
+  const [deleteFinishedLoading, setDeleteFinishedLoading] = useState(false);
 
   // Sync tab to match the order type that just triggered the modal
   useEffect(() => {
@@ -81,15 +85,29 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
     setVoidPasswordError('');
   };
 
-  const handleDeleteOrder = async (orderId: string) => {
-    if (!confirm('Permanently delete this record? This cannot be undone.')) return;
+  const handleDeleteOrder = (orderId: string) => {
+    setDeleteFinishedOrderId(orderId);
+    setDeleteFinishedPassword('');
+    setDeleteFinishedPasswordError('');
+  };
+
+  const confirmDeleteFinishedOrder = async () => {
+    if (deleteFinishedPassword !== 'unique') {
+      setDeleteFinishedPasswordError('Incorrect password. Please try again.');
+      return;
+    }
+    if (!deleteFinishedOrderId) return;
+    setDeleteFinishedLoading(true);
     try {
-      const res = await apiFetch(`/api/orders/${orderId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete order');
+      const res = await apiFetch(`/api/orders/${deleteFinishedOrderId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
       await fetchOrders();
-    } catch (error) {
-      console.error('Error deleting order:', error);
-      alert('Failed to delete order. Please try again.');
+      setDeleteFinishedOrderId(null);
+      setDeleteFinishedPassword('');
+    } catch {
+      setDeleteFinishedPasswordError('Failed to delete order. Please try again.');
+    } finally {
+      setDeleteFinishedLoading(false);
     }
   };
 
@@ -331,6 +349,48 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
           ]}
           onClose={() => setPrintOrder(null)}
         />
+      )}
+
+      {/* Delete Finished Password Modal */}
+      {deleteFinishedOrderId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Delete Finished Order</h3>
+              <button onClick={() => { setDeleteFinishedOrderId(null); setDeleteFinishedPassword(''); setDeleteFinishedPasswordError(''); }} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">Enter the manager password to permanently delete this finished order. This cannot be undone.</p>
+            <input
+              type="password"
+              value={deleteFinishedPassword}
+              onChange={e => { setDeleteFinishedPassword(e.target.value); setDeleteFinishedPasswordError(''); }}
+              onKeyDown={e => e.key === 'Enter' && confirmDeleteFinishedOrder()}
+              placeholder="Enter password"
+              autoFocus
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 mb-3 text-center text-2xl tracking-widest"
+            />
+            {deleteFinishedPasswordError && (
+              <p className="text-sm text-red-600 font-medium mb-3">{deleteFinishedPasswordError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDeleteFinishedOrderId(null); setDeleteFinishedPassword(''); setDeleteFinishedPasswordError(''); }}
+                className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteFinishedOrder}
+                disabled={deleteFinishedLoading || !deleteFinishedPassword}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:bg-slate-300 transition-colors"
+              >
+                {deleteFinishedLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete Void Password Modal */}
