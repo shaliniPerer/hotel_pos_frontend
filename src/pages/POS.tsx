@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Search, ShoppingBag, Plus, Minus, Trash2, CreditCard, Banknote, BedDouble, Receipt, TrendingUp, Menu, Sun, Moon, Play, Settings, ListOrdered, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart, Pizza, UtensilsCrossed, Package, Home, Truck, X, Landmark, FileCheck, FileText } from 'lucide-react';
+import { LogOut, Search, ShoppingBag, Plus, Minus, Trash2, CreditCard, Banknote, BedDouble, Receipt, TrendingUp, Menu, Sun, Moon, Play, Settings, ListOrdered, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart, Pizza, UtensilsCrossed, Package, Home, Truck, X, Landmark, FileCheck, FileText, Calendar } from 'lucide-react';
 import OrdersManagementModal from '../components/OrdersManagementModal';
 import ReceiptModal from '../components/ReceiptModal';
 import AddItemModal from '../components/AddItemModal';
@@ -248,6 +248,7 @@ export default function POS() {
             {user?.role !== 'cashier' && (
               <>
                 <button onClick={() => navigate('/dashboard')} className="hover:text-indigo-600 ml-2" title="Dashboard & Analytics"><TrendingUp size={24} /></button>
+                {/* <button onClick={() => navigate('/events')} className="hover:text-violet-600 ml-2" title="Event Management"><Calendar size={24} /></button> */}
               </>
             )}
             <button onClick={handleLogout} className="hover:text-red-600 ml-2"><LogOut size={24} /></button>
@@ -462,6 +463,7 @@ export default function POS() {
                   // Editing existing order — skip delivery modal, save & show KOT directly
                   const saved = await handleSaveOrder(orderType, orderReference);
                   if (saved) {
+                    setOriginalOrderItems(saved.items || []);
                     setCurrentOrderNumber(saved.order_number ? `KOT-${String(saved.order_number).padStart(3, '0')}` : `KOT-${orderReference}`);
                     setShowKOTModal(true);
                   }
@@ -531,11 +533,29 @@ export default function POS() {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">Table No</label>
-                      <input type="text" value={tableNo} onChange={e => setTableNo(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={tableNo}
+                        onChange={e => {
+                          const v = e.target.value.replace(/[^0-9]/g, '');
+                          setTableNo(v.replace(/^0+/, '') );
+                        }}
+                        className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">No. of Pax</label>
-                      <input type="number" value={pax} onChange={e => setPax(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={pax}
+                        onChange={e => {
+                          const v = e.target.value.replace(/[^0-9]/g, '');
+                          setPax(v.replace(/^0+/, ''));
+                        }}
+                        className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
                     </div>
                     
                     <div>
@@ -591,7 +611,16 @@ export default function POS() {
                 {deliveryMethod === 'room_service' && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Room No</label>
-                    <input type="text" value={roomNo} onChange={e => setRoomNo(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={roomNo}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, '');
+                        setRoomNo(v.replace(/^0+/, ''));
+                      }}
+                      className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
                   </div>
                 )}
 
@@ -633,6 +662,7 @@ export default function POS() {
                   setOrderType(type as any, reference);
                   const saved = await handleSaveOrder(type, reference);
                   if (saved) {
+                    setOriginalOrderItems(saved.items || []);
                     setCurrentOrderNumber(saved.order_number ? `KOT-${String(saved.order_number).padStart(3, '0')}` : `KOT-${reference}`);
                     setShowDeliveryModal(false);
                     setShowKOTModal(true);

@@ -10,11 +10,13 @@ export default function CategoriesModal({ onClose }: Props) {
   const { categories, addCategory, updateCategory, deleteCategory } = useStore();
 
   const [newName, setNewName] = useState('');
+  const [newMenuType, setNewMenuType] = useState<'function' | 'restaurant'>('restaurant');
   const [addingError, setAddingError] = useState('');
   const [adding, setAdding] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [editMenuType, setEditMenuType] = useState<'function' | 'restaurant'>('restaurant');
   const [editError, setEditError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -29,6 +31,7 @@ export default function CategoriesModal({ onClose }: Props) {
         name: newName.trim(),
         color: 'bg-slate-100',
         sort_order: categories.length + 1,
+        menu_type: newMenuType,
       });
       setNewName('');
     } catch (e: any) {
@@ -41,6 +44,7 @@ export default function CategoriesModal({ onClose }: Props) {
   const startEdit = (cat: Category) => {
     setEditingId(cat.id);
     setEditName(cat.name);
+    setEditMenuType(cat.menu_type || 'restaurant');
     setEditError('');
   };
 
@@ -49,7 +53,7 @@ export default function CategoriesModal({ onClose }: Props) {
     setEditError('');
     setSaving(true);
     try {
-      await updateCategory(id, { name: editName.trim() });
+      await updateCategory(id, { name: editName.trim(), menu_type: editMenuType });
       setEditingId(null);
     } catch (e: any) {
       setEditError(e.message || 'Failed to update category.');
@@ -85,6 +89,21 @@ export default function CategoriesModal({ onClose }: Props) {
         {/* Add new category */}
         <div className="px-6 py-4 border-b border-slate-100 shrink-0">
           <label className="block text-sm font-medium text-slate-700 mb-2">Add New Category</label>
+          {/* Menu type toggle */}
+          <div className="flex gap-1 mb-2 bg-slate-100 rounded-lg p-1 w-fit">
+            <button
+              onClick={() => setNewMenuType('restaurant')}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${newMenuType === 'restaurant' ? 'bg-white text-slate-800 shadow' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Restaurant Menu
+            </button>
+            <button
+              onClick={() => setNewMenuType('function')}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${newMenuType === 'function' ? 'bg-white text-violet-700 shadow' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Function Menu
+            </button>
+          </div>
           <div className="flex gap-2">
             <input
               type="text"
@@ -119,7 +138,7 @@ export default function CategoriesModal({ onClose }: Props) {
               <GripVertical size={16} className="text-slate-300 shrink-0" />
 
               {editingId === cat.id ? (
-                <div className="flex-1 flex items-center gap-2">
+                <div className="flex-1 flex flex-col gap-2">
                   <input
                     autoFocus
                     type="text"
@@ -131,24 +150,39 @@ export default function CategoriesModal({ onClose }: Props) {
                     }}
                     className="flex-1 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
-                  <button
-                    onClick={() => handleSaveEdit(cat.id)}
-                    disabled={saving}
-                    className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
-                  >
-                    <Check size={14} />
-                  </button>
-                  <button
-                    onClick={() => setEditingId(null)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
-                  {editError && <span className="text-xs text-red-500">{editError}</span>}
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                      <button
+                        onClick={() => setEditMenuType('restaurant')}
+                        className={`px-2 py-0.5 rounded-md text-xs font-semibold transition-colors ${editMenuType === 'restaurant' ? 'bg-white text-slate-800 shadow' : 'text-slate-500'}`}
+                      >Restaurant</button>
+                      <button
+                        onClick={() => setEditMenuType('function')}
+                        className={`px-2 py-0.5 rounded-md text-xs font-semibold transition-colors ${editMenuType === 'function' ? 'bg-white text-violet-700 shadow' : 'text-slate-500'}`}
+                      >Function</button>
+                    </div>
+                    <button
+                      onClick={() => handleSaveEdit(cat.id)}
+                      disabled={saving}
+                      className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                    {editError && <span className="text-xs text-red-500">{editError}</span>}
+                  </div>
                 </div>
               ) : (
                 <>
                   <span className="flex-1 text-sm font-medium text-slate-800">{cat.name}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-semibold mr-1 ${(cat.menu_type || 'restaurant') === 'function' ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {(cat.menu_type || 'restaurant') === 'function' ? 'Function' : 'Restaurant'}
+                  </span>
                   <span className="text-xs text-slate-400 mr-1">#{cat.sort_order}</span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button

@@ -279,13 +279,13 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
                       <div className="grid grid-cols-12 gap-2 text-xs font-medium text-slate-500 mb-2">
                         <div className="col-span-6">Item</div>
                         <div className="col-span-2 text-center">Qty</div>
-                        <div className="col-span-4 text-right">Price</div>
+                        <div className="col-span-4 text-right">Total</div>
                       </div>
                       {order.items?.map((item: any) => (
                         <div key={item.id} className="grid grid-cols-12 gap-2 text-sm items-center mb-1">
                           <div className="col-span-6 text-slate-700 truncate" title={item.product_name}>{item.product_name}</div>
                           <div className="col-span-2 text-center font-medium">{item.quantity}</div>
-                          <div className="col-span-4 text-right font-medium">{(item.price || 0).toFixed(2)}</div>
+                          <div className="col-span-4 text-right font-medium">{((item.price || 0) * (item.quantity || 1)).toFixed(2)}</div>
                         </div>
                       ))}
                     </div>

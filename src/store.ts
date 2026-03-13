@@ -26,6 +26,7 @@ export interface Category {
   name: string;
   color: string;
   sort_order: number;
+  menu_type?: 'function' | 'restaurant';
 }
 
 interface CartItem extends Product {
@@ -163,6 +164,12 @@ export const useStore = create<AppState>((set, get) => {
   },
 
   initSocket: () => {
+    // Disconnect any existing socket before creating a new one (prevents duplicate
+    // connections from React StrictMode double-invoking effects in development)
+    const existing = get().socket;
+    if (existing) {
+      existing.disconnect();
+    }
     const socketUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '');
     const socket = io(socketUrl);
     socket.on('order:created', (order: Order) => {
