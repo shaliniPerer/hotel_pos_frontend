@@ -1868,19 +1868,6 @@ export default function RoomService() {
 
             {/* ── Rate Plan ── */}
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Pricing</p>
-              <FormField label="Room Price per Night (LKR)">
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">LKR</span>
-                  <input type="number" min="0" value={roomForm.price} onChange={(e) => setRoomForm({ ...roomForm, price: e.target.value })}
-                    placeholder="0"
-                    className="w-full border border-slate-200 rounded-xl pl-12 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                </div>
-              </FormField>
-            </div>
-
-            {/* ── Rate Plan ── */}
-            <div>
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Rate Plan</p>
               <div className="flex gap-2 mb-2">
                 <input
