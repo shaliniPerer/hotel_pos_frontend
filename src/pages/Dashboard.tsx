@@ -4,7 +4,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   ShoppingCart, LogOut, TrendingUp, DollarSign, 
   ReceiptText, BarChart3, Calendar, Download, FileText, CreditCard, ChefHat, ChevronDown, Menu, X,
-  CalendarDays, Phone, Clock, Users, Printer, Ban, Trash2
+  CalendarDays, Phone, Clock, Users, Printer, Ban, Trash2, BedDouble
 } from 'lucide-react';
 import PieChart from '../components/PieChart';
 
@@ -71,6 +71,7 @@ export default function Dashboard() {
   const [todayOrders, setTodayOrders] = useState(0);
   const [pendingOrders, setPendingOrders] = useState(0);
   const [completedOrders, setCompletedOrders] = useState(0);
+  const [voidedOrders, setVoidedOrders] = useState(0);
 
   // Analytics data
   const navState = (location.state as any) || {};
@@ -126,12 +127,14 @@ export default function Dashboard() {
         
         // Calculate totals
         const completed = orders.filter((o: any) => o.status === 'completed');
-        const pending = orders.filter((o: any) => o.status === 'pending');
+        const active = orders.filter((o: any) => o.status === 'active');
+        const voided = orders.filter((o: any) => o.status === 'void');
         const todayCompletedOrders = completed.filter((o: any) => o.created_at?.split('T')[0] === today);
         
         setTotalOrders(orders.length);
         setCompletedOrders(completed.length);
-        setPendingOrders(pending.length);
+        setPendingOrders(active.length);
+        setVoidedOrders(voided.length);
         setTodayOrders(todayCompletedOrders.length);
         
         const totalSalesAmount = completed.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
@@ -321,6 +324,10 @@ export default function Dashboard() {
             <Calendar size={20} />
             <span className="font-medium">Event Management</span>
           </Link>
+          <Link to="/room-service" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition-colors">
+            <BedDouble size={20} />
+            <span className="font-medium">Room Service</span>
+          </Link>
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -412,7 +419,7 @@ export default function Dashboard() {
                   <ReceiptText size={18} />
                 </div>
                 <div>
-                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Pending</p>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Active KOTs</p>
                   <p className="text-sm md:text-lg font-bold text-slate-800">{pendingOrders}</p>
                 </div>
               </div>
@@ -426,6 +433,18 @@ export default function Dashboard() {
                 <div>
                   <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Completed</p>
                   <p className="text-sm md:text-lg font-bold text-slate-800">{completedOrders}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-red-100 text-red-600 rounded-xl">
+                  <ReceiptText size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase">Voided KOTs</p>
+                  <p className="text-sm md:text-lg font-bold text-slate-800">{voidedOrders}</p>
                 </div>
               </div>
             </div>

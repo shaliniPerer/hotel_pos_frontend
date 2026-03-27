@@ -173,12 +173,17 @@ export const useStore = create<AppState>((set, get) => {
     const socketUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '');
     const socket = io(socketUrl);
     socket.on('order:created', (order: Order) => {
-      set((state) => ({ orders: [order, ...state.orders] }));
+      set((state) => {
+        // Avoid duplicating orders that fetchOrders() may have already added
+        if (state.orders.some(o => o.id === order.id)) return state;
+        return { orders: [order, ...state.orders] };
+      });
     });
     socket.on('order:updated', (updatedOrder: Order) => {
-      set((state) => ({
-        orders: state.orders.map((o) => o.id === updatedOrder.id ? updatedOrder : o)
-      }));
+      set((state) => {
+        if (!state.orders.some(o => o.id === updatedOrder.id)) return state;
+        return { orders: state.orders.map((o) => o.id === updatedOrder.id ? updatedOrder : o) };
+      });
     });
     set({ socket });
   },

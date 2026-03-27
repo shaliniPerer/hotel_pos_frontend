@@ -58,6 +58,7 @@ export default function POS() {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const isSavingRef = useRef(false);
 
   const scrollCategories = (dir: 'left' | 'right') => {
     if (categoryScrollRef.current) {
@@ -69,6 +70,7 @@ export default function POS() {
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
   const [completedPayments, setCompletedPayments] = useState<any[]>([]);
   const [originalOrderItems, setOriginalOrderItems] = useState<any[]>([]);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -121,7 +123,7 @@ export default function POS() {
   const filteredProducts = products.filter(p => {
     const matchesCategory = activeCategory ? p.category_id === activeCategory : true;
     const q = searchQuery.toLowerCase();
-    const matchesSearch = p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+    const matchesSearch = p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase() === q;
     const isVisible = p.visible !== false;
     return matchesCategory && matchesSearch && isVisible;
   });
@@ -171,6 +173,9 @@ export default function POS() {
   };
 
   const handleSaveOrder = async (type: string, reference: string) => {
+    if (isSavingRef.current) return null;
+    isSavingRef.current = true;
+    setIsSavingOrder(true);
     try {
       const url = activeOrderId ? `/api/orders/${activeOrderId}` : '/api/orders';
       const method = activeOrderId ? 'PUT' : 'POST';
@@ -203,6 +208,9 @@ export default function POS() {
       console.error('Save order failed', error);
       alert('Failed to save order: ' + error.message);
       return null;
+    } finally {
+      isSavingRef.current = false;
+      setIsSavingOrder(false);
     }
   };
 
@@ -248,7 +256,7 @@ export default function POS() {
             {user?.role !== 'cashier' && (
               <>
                 <button onClick={() => navigate('/dashboard')} className="hover:text-indigo-600 ml-2" title="Dashboard & Analytics"><TrendingUp size={24} /></button>
-                {/* <button onClick={() => navigate('/events')} className="hover:text-violet-600 ml-2" title="Event Management"><Calendar size={24} /></button> */}
+                <button onClick={() => navigate('/events')} className="hover:text-violet-600 ml-2" title="Event Management"><Calendar size={24} /></button>
               </>
             )}
             <button onClick={handleLogout} className="hover:text-red-600 ml-2"><LogOut size={24} /></button>
@@ -457,14 +465,17 @@ export default function POS() {
               </div>
             </div>
             <button 
-              disabled={cart.length === 0} 
+              disabled={cart.length === 0 || isSavingOrder} 
               onClick={async () => {
                 if (activeOrderId) {
                   // Editing existing order — skip delivery modal, save & show KOT directly
+                 
                   const saved = await handleSaveOrder(orderType, orderReference);
                   if (saved) {
-                    setOriginalOrderItems(saved.items || []);
                     setCurrentOrderNumber(saved.order_number ? `KOT-${String(saved.order_number).padStart(3, '0')}` : `KOT-${orderReference}`);
+                    // Reset KOT Bills modal so it doesn't bleed through
+                    setShowKOTBillsModal(false);
+                    setSelectedKOTOrder(null);
                     setShowKOTModal(true);
                   }
                 } else {
@@ -660,18 +671,22 @@ export default function POS() {
                   }
 
                   setOrderType(type as any, reference);
+                  // Clear stale original items so the KOT always shows full items for a new order
+                  setOriginalOrderItems([]);
                   const saved = await handleSaveOrder(type, reference);
                   if (saved) {
-                    setOriginalOrderItems(saved.items || []);
                     setCurrentOrderNumber(saved.order_number ? `KOT-${String(saved.order_number).padStart(3, '0')}` : `KOT-${reference}`);
+                    // Reset KOT Bills modal so it doesn't bleed through
+                    setShowKOTBillsModal(false);
+                    setSelectedKOTOrder(null);
                     setShowDeliveryModal(false);
                     setShowKOTModal(true);
                   }
                 }}
-                disabled={deliveryMethod === 'dine_in' && !!tableNo && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo)}
+                disabled={isSavingOrder || (deliveryMethod === 'dine_in' && !!tableNo && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo))}
                 className="px-6 py-2.5 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
               >
-                Continue
+                {isSavingOrder ? 'Saving...' : 'Continue'}
               </button>
             </div>
           </div>
@@ -684,7 +699,7 @@ export default function POS() {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] print:shadow-none print:w-auto print:max-w-none">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center print:hidden">
               <h2 className="text-lg font-bold text-slate-800">KOT - {currentOrderNumber}</h2>
-              <button onClick={async () => { await fetchOrders(); setShowKOTModal(false); setShowOrdersManagementModal(true); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setShowKOTModal(false); }} className="text-slate-400 hover:text-slate-600">
                 <X size={24} />
               </button>
             </div>
@@ -735,7 +750,7 @@ export default function POS() {
                       ));
                     }
 
-                    // Editing existing order — only show changes
+                    // Updating existing order — show only changes
                     const addedItems: React.ReactNode[] = [];
                     const removedLines: React.ReactNode[] = [];
 
@@ -808,7 +823,17 @@ export default function POS() {
                           </>
                         )}
                         {addedItems.length === 0 && removedLines.length === 0 && (
-                          <div style={{ textAlign: 'center', color: '#666' }}>No changes</div>
+                          // No diff — show all items as a reprint so the KOT is never blank
+                          cart.map(item => (
+                            <div key={item.id} style={{ marginBottom: '8px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                                <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
+                                <span style={{ fontSize: '15px' }}>{item.quantity}</span>
+                              </div>
+                              <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
+                              {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
+                            </div>
+                          ))
                         )}
                       </>
                     );
@@ -831,7 +856,7 @@ export default function POS() {
                   Print
                 </button>
                 <button
-                  onClick={async () => { await fetchOrders(); setShowKOTModal(false); setShowOrdersManagementModal(true); }}
+                  onClick={() => { setShowKOTModal(false); }}
                   className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                 >
                   Close

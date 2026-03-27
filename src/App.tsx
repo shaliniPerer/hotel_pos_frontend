@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import POS from './pages/POS';
 import Dashboard from './pages/Dashboard';
 import Events from './pages/Events';
+import RoomService from './pages/RoomService';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useStore } from './store';
 
@@ -44,6 +45,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Events />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/room-service"
+          element={
+            <ProtectedRoute>
+              <RoomService />
             </ProtectedRoute>
           }
         />
