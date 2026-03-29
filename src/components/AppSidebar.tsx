@@ -96,14 +96,14 @@ export default function AppSidebar({
                 <TrendingUp size={16} className="shrink-0" />
                 <span>Dashboard</span>
               </Link>
-              <Link
+              {/* <Link
                 to="/reports"
                 onClick={onClose}
                 className={linkCls(path === '/reports', 'cyan')}
               >
                 <BarChart2 size={16} className="shrink-0" />
                 <span>Reports</span>
-              </Link>
+              </Link> */}
             </div>
           </div>
 
