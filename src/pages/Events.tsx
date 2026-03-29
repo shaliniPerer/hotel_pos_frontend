@@ -7,6 +7,7 @@ import {
   CalendarDays, FileText, DollarSign, CreditCard, Banknote, Check, Ban,
   ShoppingCart, Search, UtensilsCrossed, BedDouble
 } from 'lucide-react';
+import AppSidebar from '../components/AppSidebar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -322,100 +323,77 @@ export default function Events() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* ── Navbar ── */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 sticky top-0 z-30 shadow-sm">
-        <button
-          onClick={() => setShowSidebar(true)}
-          className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-        >
-          <MenuIcon className="w-5 h-5 text-slate-600" />
-        </button>
-        <CalendarDays className="w-6 h-6 text-violet-500" />
-        <span className="font-bold text-slate-800 text-lg">Event Management</span>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-sm text-slate-500 hidden sm:block">{user?.name || user?.username}</span>
-          <button
-            onClick={() => { logout(); navigate('/login'); }}
-            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-          >
-            <LogOut className="w-5 h-5 text-slate-500" />
-          </button>
-        </div>
-      </header>
+    <div className="flex h-screen bg-slate-50 font-sans">
+      <AppSidebar show={showSidebar} onClose={() => setShowSidebar(false)} />
 
-      {/* ── Sidebar ── */}
-      {showSidebar && (
-        <div className="fixed inset-0 z-40 flex">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowSidebar(false)} />
-          <div className="relative bg-white w-64 h-full shadow-2xl flex flex-col p-6">
-            <button className="absolute top-4 right-4 p-2 rounded-lg hover:bg-slate-100" onClick={() => setShowSidebar(false)}>
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="font-bold text-xl text-slate-800 mb-6 mt-2">Navigation</h2>
-            <nav className="flex flex-col gap-1">
-              <button onClick={() => { navigate('/'); setShowSidebar(false); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-100 text-slate-700 font-medium text-left">
-                <ShoppingCart className="w-5 h-5 text-slate-400" /> POS
-              </button>
-              <button onClick={() => { navigate('/dashboard'); setShowSidebar(false); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-100 text-slate-700 font-medium text-left">
-                <FileText className="w-5 h-5 text-slate-400" /> Dashboard
-              </button>
-              <button className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-violet-50 text-violet-700 font-semibold text-left">
-                <CalendarDays className="w-5 h-5 text-violet-500" /> Events
-              </button>
-              <button onClick={() => { navigate('/room-service'); setShowSidebar(false); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-100 text-slate-700 font-medium text-left">
-                <BedDouble className="w-5 h-5 text-slate-400" /> Room Service
-              </button>
-            </nav>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* ── Sticky header ── */}
+        <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 sticky top-0 z-20 shadow-sm shrink-0">
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+          >
+            <MenuIcon className="w-5 h-5 text-slate-600" />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-violet-100 text-violet-600 rounded-xl shrink-0">
+              <CalendarDays className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Event Management System</p>
+              <h2 className="text-lg font-bold text-slate-800 leading-tight">Event Management</h2>
+            </div>
           </div>
-        </div>
-      )}
+          <p className="ml-auto text-xs text-slate-400 hidden sm:block">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
+        </header>
 
-      {/* ── Tabs & Actions ── */}
-      <div className="px-4 pt-4 pb-0 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="flex bg-white border border-slate-200 rounded-xl p-1 gap-1">
-          <button
-            onClick={() => setActiveTab('bookings')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'bookings' ? 'bg-violet-500 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            Bookings
-          </button>
-          <button
-            onClick={() => setActiveTab('functions')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'functions' ? 'bg-violet-500 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            Event Functions
-          </button>
-        </div>
-        <div className="ml-auto">
-          {activeTab === 'bookings' ? (
+        {/* ── Tabs & Actions ── */}
+        <div className="px-4 pt-4 pb-0 flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+          <div className="flex bg-white border border-slate-200 rounded-xl p-1 gap-1">
             <button
-              onClick={() => { setEditingBooking(null); setShowBookingForm(true); }}
-              className="flex items-center gap-2 bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition-colors"
+              onClick={() => setActiveTab('bookings')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'bookings' ? 'bg-violet-500 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}
             >
-              <Plus className="w-4 h-4" /> New Booking
+              Bookings
             </button>
-          ) : (
-            <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('functions')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'functions' ? 'bg-violet-500 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              Event Functions
+            </button>
+          </div>
+          <div className="ml-auto">
+            {activeTab === 'bookings' ? (
               <button
-                onClick={() => { setEditingFunction(null); setShowFunctionForm(true); }}
+                onClick={() => { setEditingBooking(null); setShowBookingForm(true); }}
                 className="flex items-center gap-2 bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition-colors"
               >
-                <Plus className="w-4 h-4" /> Add New Function
+                <Plus className="w-4 h-4" /> New Booking
               </button>
-              <button
-                onClick={() => { setEditingFunction(null); setShowFunctionMenuForm(true); }}
-                className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Add Function Menu
-              </button>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setEditingFunction(null); setShowFunctionForm(true); }}
+                  className="flex items-center gap-2 bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Add New Function
+                </button>
+                <button
+                  onClick={() => { setEditingFunction(null); setShowFunctionMenuForm(true); }}
+                  className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Add Function Menu
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* ── Content ── */}
-      <main className="flex-1 p-4">
+        {/* ── Content ── */}
+        <main className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center h-60 text-slate-400">Loading...</div>
         ) : activeTab === 'bookings' ? (
@@ -583,6 +561,7 @@ export default function Events() {
           onDelete={(id) => { setViewingBooking(null); setDeleteBookingId(id); setDeletePassword(''); setDeleteError(''); }}
         />
       )}
+      </div>
     </div>
   );
 }

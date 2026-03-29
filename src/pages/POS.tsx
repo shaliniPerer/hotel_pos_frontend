@@ -620,19 +620,43 @@ export default function POS() {
                 )}
 
                 {deliveryMethod === 'room_service' && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Room No</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={roomNo}
-                      onChange={e => {
-                        const v = e.target.value.replace(/[^0-9]/g, '');
-                        setRoomNo(v.replace(/^0+/, ''));
-                      }}
-                      className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Room No</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={roomNo}
+                        onChange={e => {
+                          const v = e.target.value.replace(/[^0-9]/g, '');
+                          setRoomNo(v.replace(/^0+/, ''));
+                        }}
+                        className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-2">Running Rooms</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(() => {
+                          const occupiedRooms = orders
+                            .filter(o => o.type === 'room' && o.status === 'active')
+                            .map(o => o.reference);
+                          return occupiedRooms.length === 0
+                            ? <span className="text-sm text-slate-400">No rooms occupied</span>
+                            : occupiedRooms.map((rm, i) => (
+                              <span key={i} className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium text-sm">{rm}</span>
+                            ));
+                        })()}
+                      </div>
+                    </div>
+
+                    {roomNo && orders.some(o => o.type === 'room' && o.status === 'active' && o.reference === roomNo) && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 font-medium">
+                        ⚠ Room {roomNo} already has an active order. Please finish or void the existing order first.
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {deliveryMethod === 'delivery' && (
@@ -670,6 +694,11 @@ export default function POS() {
                     return;
                   }
 
+                  // Block if room is already occupied
+                  if (type === 'room' && orders.some(o => o.type === 'room' && o.status === 'active' && o.reference === roomNo)) {
+                    return;
+                  }
+
                   setOrderType(type as any, reference);
                   // Clear stale original items so the KOT always shows full items for a new order
                   setOriginalOrderItems([]);
@@ -683,7 +712,7 @@ export default function POS() {
                     setShowKOTModal(true);
                   }
                 }}
-                disabled={isSavingOrder || (deliveryMethod === 'dine_in' && !!tableNo && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo))}
+                disabled={isSavingOrder || (deliveryMethod === 'dine_in' && !!tableNo && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo)) || (deliveryMethod === 'room_service' && !!roomNo && orders.some(o => o.type === 'room' && o.status === 'active' && o.reference === roomNo))}
                 className="px-6 py-2.5 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
               >
                 {isSavingOrder ? 'Saving...' : 'Continue'}

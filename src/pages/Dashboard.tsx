@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   ShoppingCart, LogOut, TrendingUp, DollarSign, 
   ReceiptText, BarChart3, Calendar, Download, FileText, CreditCard, ChefHat, ChevronDown, Menu, X,
-  CalendarDays, Phone, Clock, Users, Printer, Ban, Trash2, BedDouble
+  UtensilsCrossed, Package, Home, Truck, CheckCircle2, AlertCircle, Receipt
 } from 'lucide-react';
+import AppSidebar from '../components/AppSidebar';
 import PieChart from '../components/PieChart';
 
 type DateFilter = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'custom';
@@ -22,14 +23,20 @@ interface PaymentData {
   total_amount: number;
 }
 
-interface KOTData {
-  order_id: string;
-  order_number: string;
-  table_no?: string;
-  room_no?: string;
-  items: Array<{ product_name: string; quantity: number }>;
+interface BillOrder {
+  id: string;
+  order_number: number;
+  type: string;
+  reference: string;
+  items: Array<{ product_name: string; quantity: number; price: number }>;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  payment_method: string;
+  paid_amount: number;
+  status: 'active' | 'completed' | 'void';
   created_at: string;
-  status: string;
 }
 
 interface CategorySalesData {
@@ -37,25 +44,6 @@ interface CategorySalesData {
   color: string;
   itemCount: number;
   totalValue: number;
-}
-
-interface EventBooking {
-  id: string;
-  customer_name: string;
-  customer_phone: string;
-  event_date: string;
-  event_time: string;
-  pax: number;
-  function_name: string;
-  items: Array<{ id: string; name: string; price: number; quantity: number }>;
-  total: number;
-  advance_payment: number;
-  balance: number;
-  payment_method: string;
-  payment_status: 'pending' | 'advance' | 'full';
-  status: 'upcoming' | 'completed' | 'void';
-  notes: string;
-  created_at: string;
 }
 
 export default function Dashboard() {
@@ -75,7 +63,7 @@ export default function Dashboard() {
 
   // Analytics data
   const navState = (location.state as any) || {};
-  const [activeTab, setActiveTab] = useState<'item_sales' | 'payments' | 'kot' | 'events'>(navState.tab || 'item_sales');
+  const [activeTab, setActiveTab] = useState<'item_sales' | 'payments' | 'bills'>(navState.tab || 'item_sales');
   const [dateFilter, setDateFilter] = useState<DateFilter>(navState.dateFilter || 'today');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -83,10 +71,8 @@ export default function Dashboard() {
   
   const [itemSales, setItemSales] = useState<ItemSalesData[]>([]);
   const [payments, setPayments] = useState<PaymentData[]>([]);
-  const [kotOrders, setKotOrders] = useState<KOTData[]>([]);
-  const [eventBookings, setEventBookings] = useState<EventBooking[]>([]);
-  const [eventStatusFilter, setEventStatusFilter] = useState<'all' | 'upcoming' | 'completed' | 'void'>('all');
-  const [viewingEventBooking, setViewingEventBooking] = useState<EventBooking | null>(null);
+  const [billOrders, setBillOrders] = useState<BillOrder[]>([]);
+  const [billStatusFilter, setBillStatusFilter] = useState<'all' | 'active' | 'completed' | 'void'>('all');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -99,7 +85,6 @@ export default function Dashboard() {
     fetchCategories();
     fetchDashboardStats();
     fetchReportData();
-    fetchEventBookings();
   }, [token, user]);
 
   useEffect(() => {
@@ -107,15 +92,6 @@ export default function Dashboard() {
       fetchReportData();
     }
   }, [dateFilter, startDate, endDate, activeTab]);
-
-  const fetchEventBookings = async () => {
-    try {
-      const res = await apiFetch('/api/events/bookings');
-      if (res.ok) setEventBookings(await res.json());
-    } catch (e) {
-      console.error('Failed to fetch event bookings:', e);
-    }
-  };
 
   const fetchDashboardStats = async () => {
     try {
@@ -209,11 +185,16 @@ export default function Dashboard() {
           const data = await res.json();
           setPayments(data);
         }
-      } else if (activeTab === 'kot') {
-        const res = await apiFetch(`/api/reports/kot?start_date=${start}&end_date=${end}`);
+      } else if (activeTab === 'bills') {
+        const res = await apiFetch(`/api/orders`);
         if (res.ok) {
-          const data = await res.json();
-          setKotOrders(data);
+          const allOrders: BillOrder[] = await res.json();
+          const { start, end } = getDateRange(dateFilter);
+          const filtered = allOrders.filter(o => {
+            const d = (o.created_at || '').split('T')[0];
+            return d >= start && d <= end;
+          });
+          setBillOrders(filtered);
         }
       }
     } catch (err) {
@@ -288,64 +269,76 @@ export default function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
+  const getDateLabel = () => {
+    if (dateFilter === 'custom') return `${startDate} to ${endDate}`;
+    return dateFilter.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  const downloadItemSalesPDF = (data: ItemSalesData[]) => {
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) return;
+    const totalQty = data.reduce((s, d) => s + d.quantity, 0);
+    const totalAmt = data.reduce((s, d) => s + d.total_amount, 0);
+    const rows = data.map(d => `<tr><td>${d.product_name}</td><td style="text-align:right">${d.quantity}</td><td style="text-align:right">LKR ${d.total_amount.toFixed(2)}</td></tr>`).join('');
+    win.document.write(`<!DOCTYPE html><html><head><title>Item Sales Report</title><style>
+      body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:32px;color:#1e293b;}
+      .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:24px;}
+      .title{font-size:26px;font-weight:700;color:#0891b2;}
+      .sub{font-size:13px;color:#64748b;margin-top:4px;}
+      table{width:100%;border-collapse:collapse;margin-top:8px;}
+      th{background:#0891b2;color:white;padding:10px 12px;text-align:left;font-size:12px;}
+      th:not(:first-child){text-align:right;}
+      td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;}
+      tr:hover td{background:#f8fafc;}
+      .tfoot td{background:#f1f5f9;font-weight:700;border-top:2px solid #0891b2;}
+      .footer{text-align:center;font-size:11px;color:#94a3b8;margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;}
+      @media print{body{padding:16px;}}
+    </style></head><body>
+    <div class="header"><div class="title">HotelMate POS</div><div class="sub">Item Sales Report &mdash; ${getDateLabel()}</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
+    <table><thead><tr><th>Product Name</th><th>Quantity Sold</th><th>Total Amount</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td><strong>TOTAL</strong></td><td style="text-align:right">${totalQty}</td><td style="text-align:right">LKR ${totalAmt.toFixed(2)}</td></tr></tfoot>
+    </table>
+    <div class="footer">HotelMate POS &mdash; Item Sales Report</div>
+    </body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 400);
+  };
+
+  const downloadPaymentsPDF = (data: PaymentData[]) => {
+    const win = window.open('', '_blank', 'width=900,height=600');
+    if (!win) return;
+    const totalOrders = data.reduce((s, d) => s + d.order_count, 0);
+    const totalAmt = data.reduce((s, d) => s + d.total_amount, 0);
+    const rows = data.map(d => `<tr><td style="text-transform:capitalize">${d.payment_method.replace(/_/g,' ')}</td><td style="text-align:right">${d.order_count}</td><td style="text-align:right">LKR ${d.total_amount.toFixed(2)}</td></tr>`).join('');
+    win.document.write(`<!DOCTYPE html><html><head><title>Payments Report</title><style>
+      body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:32px;color:#1e293b;}
+      .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:24px;}
+      .title{font-size:26px;font-weight:700;color:#0891b2;}
+      .sub{font-size:13px;color:#64748b;margin-top:4px;}
+      table{width:100%;border-collapse:collapse;margin-top:8px;}
+      th{background:#0891b2;color:white;padding:10px 12px;text-align:left;font-size:12px;}
+      th:not(:first-child){text-align:right;}
+      td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;}
+      tr:hover td{background:#f8fafc;}
+      .tfoot td{background:#f1f5f9;font-weight:700;border-top:2px solid #0891b2;}
+      .footer{text-align:center;font-size:11px;color:#94a3b8;margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;}
+      @media print{body{padding:16px;}}
+    </style></head><body>
+    <div class="header"><div class="title">HotelMate POS</div><div class="sub">Payments Report &mdash; ${getDateLabel()}</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
+    <table><thead><tr><th>Payment Method</th><th>Order Count</th><th>Total Amount</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td><strong>TOTAL</strong></td><td style="text-align:right">${totalOrders}</td><td style="text-align:right">LKR ${totalAmt.toFixed(2)}</td></tr></tfoot>
+    </table>
+    <div class="footer">HotelMate POS &mdash; Payments Report</div>
+    </body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 400);
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
-      {/* Mobile Sidebar Backdrop */}
-      {showSidebar && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setShowSidebar(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div className={`${
-        showSidebar ? 'flex' : 'hidden'
-      } md:flex flex-col w-64 bg-slate-900 text-slate-300 fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto shrink-0`}>
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-          <h1 className="text-lg font-bold text-white leading-tight">
-            The Tranquil Restaurant
-          </h1>
-          <button onClick={() => setShowSidebar(false)} className="md:hidden text-slate-400 hover:text-white">
-            <X size={18} />
-          </button>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-2">
-          <Link to="/" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition-colors">
-            <ShoppingCart size={20} />
-            <span className="font-medium">POS Terminal</span>
-          </Link>
-          <Link to="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-cyan-600 text-white rounded-xl transition-colors">
-            <TrendingUp size={20} />
-            <span className="font-medium">Dashboard & Analytics</span>
-          </Link>
-          <Link to="/events" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition-colors">
-            <Calendar size={20} />
-            <span className="font-medium">Event Management</span>
-          </Link>
-          <Link to="/room-service" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition-colors">
-            <BedDouble size={20} />
-            <span className="font-medium">Room Service</span>
-          </Link>
-        </nav>
-
-        <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3 mb-4 px-4">
-            <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold">
-              {user?.name?.charAt(0) || 'U'}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">{user?.name}</p>
-              <p className="text-xs text-slate-500 capitalize">{user?.role}</p>
-            </div>
-          </div>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
-            <LogOut size={16} />
-            Sign Out
-          </button>
-        </div>
-      </div>
+      <AppSidebar show={showSidebar} onClose={() => setShowSidebar(false)} />
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
@@ -613,26 +606,15 @@ export default function Dashboard() {
                   Payments
                 </button>
                 <button
-                  onClick={() => setActiveTab('kot')}
+                  onClick={() => setActiveTab('bills')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeTab === 'kot'
+                    activeTab === 'bills'
                       ? 'bg-cyan-100 text-cyan-700'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  <ChefHat size={16} />
-                  Kitchen (KOT)
-                </button>
-                <button
-                  onClick={() => setActiveTab('events')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeTab === 'events'
-                      ? 'bg-violet-100 text-violet-700'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <CalendarDays size={16} />
-                  Event Bookings
+                  <ReceiptText size={16} />
+                  Bills
                 </button>
               </div>
             </div>
@@ -645,7 +627,14 @@ export default function Dashboard() {
                   {/* Item Sales Report */}
                   {activeTab === 'item_sales' && (
                     <>
-                      <div className="flex justify-end mb-4">
+                      <div className="flex justify-end gap-2 mb-4">
+                        <button
+                          onClick={() => downloadItemSalesPDF(itemSales)}
+                          className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+                        >
+                          <FileText size={16} />
+                          Download PDF
+                        </button>
                         <button
                           onClick={() => downloadCSV(itemSales, 'item_sales.csv')}
                           className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
@@ -692,7 +681,14 @@ export default function Dashboard() {
                   {/* Payments Report */}
                   {activeTab === 'payments' && (
                     <>
-                      <div className="flex justify-end mb-4">
+                      <div className="flex justify-end gap-2 mb-4">
+                        <button
+                          onClick={() => downloadPaymentsPDF(payments)}
+                          className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+                        >
+                          <FileText size={16} />
+                          Download PDF
+                        </button>
                         <button
                           onClick={() => downloadCSV(payments, 'payments.csv')}
                           className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
@@ -736,72 +732,88 @@ export default function Dashboard() {
                     </>
                   )}
 
-                  {/* Event Bookings */}
-                  {activeTab === 'events' && (() => {
-                    const filtered = eventStatusFilter === 'all'
-                      ? eventBookings
-                      : eventBookings.filter(b => b.status === eventStatusFilter);
-                    const upcoming = eventBookings.filter(b => b.status === 'upcoming');
-                    const advanceTotal = eventBookings.reduce((s, b) => s + (b.advance_payment || 0), 0);
-                    const balanceTotal = upcoming.reduce((s, b) => s + (b.balance || 0), 0);
 
-                    const printPDF = (b: EventBooking) => {
-                      const win = window.open('', '_blank', 'width=800,height=900');
+                  {/* Bills / Order Management */}
+                  {activeTab === 'bills' && (() => {
+                    const filtered = billStatusFilter === 'all'
+                      ? billOrders
+                      : billOrders.filter(o => o.status === billStatusFilter);
+
+                    const completedBills = billOrders.filter(o => o.status === 'completed');
+                    const activeBills   = billOrders.filter(o => o.status === 'active');
+                    const voidedBills   = billOrders.filter(o => o.status === 'void');
+                    const totalRevenue  = completedBills.reduce((s, o) => s + (o.total || 0), 0);
+
+                    const typeIcon = (type: string) => {
+                      if (type === 'table')    return <UtensilsCrossed size={13} className="text-cyan-500" />;
+                      if (type === 'room')     return <Home size={13} className="text-indigo-500" />;
+                      if (type === 'takeaway') return <Package size={13} className="text-amber-500" />;
+                      if (type === 'delivery') return <Truck size={13} className="text-emerald-500" />;
+                      return <Receipt size={13} className="text-slate-400" />;
+                    };
+                    const typeLabel = (type: string) => {
+                      if (type === 'table')    return 'Dine In';
+                      if (type === 'room')     return 'Room Service';
+                      if (type === 'takeaway') return 'Takeaway';
+                      if (type === 'delivery') return 'Delivery';
+                      return type || '—';
+                    };
+                    const statusBadge = (status: string) => {
+                      if (status === 'completed') return 'bg-emerald-100 text-emerald-700';
+                      if (status === 'active')    return 'bg-amber-100 text-amber-700';
+                      return 'bg-red-100 text-red-600 line-through opacity-70';
+                    };
+                    const methodLabel = (m: string) => {
+                      if (m === 'cash')           return 'Cash';
+                      if (m === 'card')           return 'Card';
+                      if (m === 'online_banking') return 'Online';
+                      if (m === 'check')          return 'Check';
+                      return m || '—';
+                    };
+
+                    const downloadBillsPDF = () => {
+                      const win = window.open('', '_blank', 'width=1100,height=800');
                       if (!win) return;
-                      win.document.write(`<!DOCTYPE html><html><head><title>Event Booking - ${b.customer_name}</title>
-                      <style>
-                        body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:30px;color:#1e293b;}
-                        .header{text-align:center;border-bottom:3px solid #7c3aed;padding-bottom:20px;margin-bottom:24px;}
-                        .hotel-name{font-size:28px;font-weight:700;color:#7c3aed;margin-bottom:4px;}
-                        .doc-title{font-size:16px;color:#64748b;margin-top:8px;}
-                        .section{margin-bottom:20px;}
-                        .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#7c3aed;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:12px;}
-                        .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-                        .field label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;}
-                        .field p{font-size:14px;font-weight:600;color:#1e293b;margin:2px 0 0;}
-                        table{width:100%;border-collapse:collapse;font-size:13px;}
-                        th{background:#7c3aed;color:white;padding:10px;text-align:left;}
-                        td{padding:9px 10px;border-bottom:1px solid #f1f5f9;}
-                        tr:last-child td{border-bottom:none;}
-                        .totals{background:#f8fafc;border-radius:8px;padding:16px;}
-                        .total-row{display:flex;justify-content:space-between;padding:4px 0;}
-                        .total-row.grand{font-size:16px;font-weight:700;color:#7c3aed;border-top:2px solid #7c3aed;margin-top:8px;padding-top:8px;}
-                        .badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;}
-                        .badge.upcoming{background:#ede9fe;color:#6d28d9;}
+                      const rows = filtered.map((o, idx) => `<tr>
+                        <td>${o.order_number ? '#' + String(o.order_number).padStart(3,'0') : '—'}</td>
+                        <td>${typeLabel(o.type)}</td>
+                        <td>${o.reference || '—'}</td>
+                        <td style="max-width:180px">${(o.items||[]).map(i=>i.product_name+'×'+i.quantity).join(', ')||'—'}</td>
+                        <td style="text-align:right">LKR ${(o.subtotal||0).toFixed(2)}</td>
+                        <td style="text-align:right">LKR ${(o.tax||0).toFixed(2)}</td>
+                        <td style="text-align:right;font-weight:700">LKR ${(o.total||0).toFixed(2)}</td>
+                        <td>${methodLabel(o.payment_method)}</td>
+                        <td><span class="badge ${o.status}">${o.status}</span></td>
+                        <td style="white-space:nowrap">${o.created_at ? new Date(o.created_at).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                      </tr>`).join('');
+                      const grandTotal = filtered.filter(o=>o.status==='completed').reduce((s,o)=>s+(o.total||0),0);
+                      win.document.write(`<!DOCTYPE html><html><head><title>Bills Report</title><style>
+                        body{font-family:Arial,sans-serif;padding:24px;color:#1e293b;font-size:12px;}
+                        .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:16px;margin-bottom:20px;}
+                        .title{font-size:22px;font-weight:700;color:#0891b2;}
+                        .sub{font-size:12px;color:#64748b;margin-top:3px;}
+                        table{width:100%;border-collapse:collapse;}
+                        th{background:#0891b2;color:white;padding:8px 10px;text-align:left;font-size:11px;}
+                        td{padding:7px 10px;border-bottom:1px solid #f1f5f9;}
+                        .badge{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;}
                         .badge.completed{background:#d1fae5;color:#065f46;}
+                        .badge.active{background:#fef3c7;color:#92400e;}
                         .badge.void{background:#fee2e2;color:#991b1b;}
-                        @media print{body{padding:15px;}}
+                        .summary{display:flex;gap:16px;margin-bottom:16px;}
+                        .card{flex:1;border-radius:8px;padding:10px 14px;}
+                        .footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;}
+                        @media print{body{padding:12px;}}
                       </style></head><body>
-                      <div class="header">
-                        <div class="hotel-name">HotelMate</div>
-                        <div class="doc-title">EVENT BOOKING CONFIRMATION</div>
-                        <div style="font-size:12px;color:#94a3b8;margin-top:6px;">Booking ID: ${b.id} &nbsp;|&nbsp; ${new Date(b.created_at).toLocaleDateString()}</div>
+                      <div class="header"><div class="title">HotelMate POS</div><div class="sub">Bills Report &mdash; ${getDateLabel()}</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
+                      <div class="summary">
+                        <div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0"><div style="font-size:10px;color:#16a34a;font-weight:700;text-transform:uppercase">Revenue</div><div style="font-size:18px;font-weight:700;color:#15803d">LKR ${totalRevenue.toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+                        <div class="card" style="background:#f0f9ff;border:1px solid #bae6fd"><div style="font-size:10px;color:#0284c7;font-weight:700;text-transform:uppercase">Completed</div><div style="font-size:18px;font-weight:700;color:#0369a1">${completedBills.length}</div></div>
+                        <div class="card" style="background:#fffbeb;border:1px solid #fde68a"><div style="font-size:10px;color:#d97706;font-weight:700;text-transform:uppercase">Active</div><div style="font-size:18px;font-weight:700;color:#b45309">${activeBills.length}</div></div>
+                        <div class="card" style="background:#fff1f2;border:1px solid #fecdd3"><div style="font-size:10px;color:#e11d48;font-weight:700;text-transform:uppercase">Voided</div><div style="font-size:18px;font-weight:700;color:#be123c">${voidedBills.length}</div></div>
                       </div>
-                      <div class="section">
-                        <div class="section-title">Customer Details</div>
-                        <div class="grid">
-                          <div class="field"><label>Customer Name</label><p>${b.customer_name}</p></div>
-                          <div class="field"><label>Phone</label><p>${b.customer_phone}</p></div>
-                          <div class="field"><label>Event Date</label><p>${b.event_date}</p></div>
-                          <div class="field"><label>Event Time</label><p>${b.event_time}</p></div>
-                          <div class="field"><label>PAX</label><p>${b.pax} persons</p></div>
-                          <div class="field"><label>Status</label><p><span class="badge ${b.status}">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span></p></div>
-                        </div>
-                      </div>
-                      <div class="section">
-                        <div class="section-title">Function Package: ${b.function_name}</div>
-                        <table><thead><tr><th>Item</th><th>Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th></tr></thead>
-                        <tbody>${b.items.map(item=>`<tr><td>${item.name}</td><td>${item.quantity}</td><td style="text-align:right">LKR ${item.price.toFixed(2)}</td><td style="text-align:right">LKR ${(item.price*item.quantity).toFixed(2)}</td></tr>`).join('')}</tbody></table>
-                      </div>
-                      <div class="section totals">
-                        <div class="total-row"><span>Subtotal</span><span>LKR ${b.total.toFixed(2)}</span></div>
-                        <div class="total-row"><span>Advance Paid</span><span style="color:#059669">LKR ${(b.advance_payment||0).toFixed(2)}</span></div>
-                        <div class="total-row grand"><span>Balance Due</span><span>LKR ${(b.balance||0).toFixed(2)}</span></div>
-                        <div class="total-row" style="margin-top:8px;font-size:12px;color:#64748b"><span>Payment Method</span><span>${b.payment_method}</span></div>
-                        <div class="total-row" style="font-size:12px;color:#64748b"><span>Payment Status</span><span>${b.payment_status}</span></div>
-                      </div>
-                      ${b.notes ? `<div class="section"><div class="section-title">Notes</div><p style="font-size:14px;color:#475569">${b.notes}</p></div>` : ''}
-                      <div style="text-align:center;font-size:11px;color:#94a3b8;margin-top:30px;border-top:1px solid #e2e8f0;padding-top:16px;">Thank you for choosing HotelMate &mdash; Generated ${new Date().toLocaleString()}</div>
+                      <table><thead><tr><th>#</th><th>Type</th><th>Reference</th><th>Items</th><th>Subtotal</th><th>Tax</th><th>Total</th><th>Payment</th><th>Status</th><th>Date &amp; Time</th></tr></thead>
+                      <tbody>${rows}</tbody></table>
+                      <div class="footer">HotelMate POS &mdash; Bills Report &mdash; Showing ${filtered.length} records &mdash; Completed Revenue: LKR ${grandTotal.toFixed(2)}</div>
                       </body></html>`);
                       win.document.close();
                       setTimeout(() => win.print(), 400);
@@ -809,216 +821,151 @@ export default function Dashboard() {
 
                     return (
                       <>
-                        {/* Event Stats */}
-                        <div className="grid grid-cols-3 gap-4 mb-6">
-                          <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 text-center">
-                            <div className="text-2xl font-bold text-violet-700">{upcoming.length}</div>
-                            <div className="text-sm text-violet-600 mt-1">Upcoming Events</div>
+                        {/* Summary cards */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-0.5">Revenue</p>
+                            <p className="text-lg font-bold text-emerald-700">LKR {totalRevenue.toLocaleString(undefined, {minimumFractionDigits:2})}</p>
                           </div>
-                          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
-                            <div className="text-2xl font-bold text-emerald-700">LKR {advanceTotal.toLocaleString()}</div>
-                            <div className="text-sm text-emerald-600 mt-1">Advance Collected</div>
+                          <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-500 mb-0.5">Completed</p>
+                            <p className="text-lg font-bold text-cyan-700">{completedBills.length}</p>
                           </div>
-                          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center">
-                            <div className="text-2xl font-bold text-amber-700">LKR {balanceTotal.toLocaleString()}</div>
-                            <div className="text-sm text-amber-600 mt-1">Balance Pending</div>
+                          <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-0.5">Active</p>
+                            <p className="text-lg font-bold text-amber-700">{activeBills.length}</p>
+                          </div>
+                          <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-red-500 mb-0.5">Voided</p>
+                            <p className="text-lg font-bold text-red-600">{voidedBills.length}</p>
                           </div>
                         </div>
 
-                        {/* Status Filter */}
-                        <div className="flex gap-2 mb-4 flex-wrap">
-                          {(['all','upcoming','completed','void'] as const).map(s => (
-                            <button key={s} onClick={() => setEventStatusFilter(s)}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${eventStatusFilter === s ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                              {s.charAt(0).toUpperCase()+s.slice(1)}
+                        {/* Filter + Download row */}
+                        <div className="flex flex-wrap items-center gap-2 mb-4">
+                          {(['all','active','completed','void'] as const).map(s => (
+                            <button key={s} onClick={() => setBillStatusFilter(s)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+                                billStatusFilter === s ? 'bg-cyan-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}>
+                              {s}
                             </button>
                           ))}
-                          <button
-                            onClick={() => {
-                              const csvData = filtered.map(b => ({
-                                customer_name: b.customer_name, phone: b.customer_phone,
-                                event_date: b.event_date, event_time: b.event_time,
-                                function_name: b.function_name, pax: b.pax,
-                                total: b.total, advance: b.advance_payment,
-                                balance: b.balance, payment_status: b.payment_status, status: b.status
-                              }));
-                              downloadCSV(csvData, 'event_bookings.csv');
-                            }}
-                            className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
-                          >
-                            <Download size={14} /> Download CSV
-                          </button>
+                          <div className="ml-auto flex items-center gap-2">
+                            <button
+                              onClick={downloadBillsPDF}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium"
+                            >
+                              <FileText size={14} /> Download PDF
+                            </button>
+                            <button
+                              onClick={() => {
+                                const csv = filtered.map(o => ({
+                                  order_number: o.order_number,
+                                  type: typeLabel(o.type),
+                                  reference: o.reference,
+                                  items: o.items?.map(i => `${i.product_name}x${i.quantity}`).join('; ') || '',
+                                  subtotal: o.subtotal,
+                                  tax: o.tax,
+                                  discount: o.discount,
+                                  total: o.total,
+                                  payment_method: methodLabel(o.payment_method),
+                                  status: o.status,
+                                  date: o.created_at,
+                                }));
+                                downloadCSV(csv, 'bills.csv');
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium"
+                            >
+                              <Download size={14} /> Download CSV
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Bookings Table */}
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse">
+                        {/* Orders table */}
+                        <div className="overflow-x-auto rounded-xl border border-slate-100">
+                          <table className="w-full text-left border-collapse text-sm">
                             <thead>
-                              <tr className="bg-violet-600 text-white text-sm">
-                                <th className="px-4 py-3 font-semibold">Customer</th>
-                                <th className="px-4 py-3 font-semibold">Phone</th>
-                                <th className="px-4 py-3 font-semibold">Date &amp; Time</th>
-                                <th className="px-4 py-3 font-semibold">Function</th>
-                                <th className="px-4 py-3 font-semibold text-center">PAX</th>
+                              <tr className="bg-cyan-600 text-white">
+                                <th className="px-4 py-3 font-semibold whitespace-nowrap">#</th>
+                                <th className="px-4 py-3 font-semibold">Type</th>
+                                <th className="px-4 py-3 font-semibold">Reference</th>
+                                <th className="px-4 py-3 font-semibold">Items</th>
+                                <th className="px-4 py-3 font-semibold text-right">Subtotal</th>
+                                <th className="px-4 py-3 font-semibold text-right">Tax</th>
                                 <th className="px-4 py-3 font-semibold text-right">Total</th>
-                                <th className="px-4 py-3 font-semibold text-right">Balance</th>
-                                <th className="px-4 py-3 font-semibold text-center">Status</th>
-                                <th className="px-4 py-3 font-semibold text-center">Actions</th>
+                                <th className="px-4 py-3 font-semibold">Payment</th>
+                                <th className="px-4 py-3 font-semibold">Status</th>
+                                <th className="px-4 py-3 font-semibold whitespace-nowrap">Date &amp; Time</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {filtered.map(b => (
-                                <tr key={b.id} className="hover:bg-slate-50 transition-colors">
-                                  <td className="px-4 py-3 text-sm font-medium text-slate-800">{b.customer_name}</td>
-                                  <td className="px-4 py-3 text-sm text-slate-600">{b.customer_phone}</td>
-                                  <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{b.event_date}<br/><span className="text-xs text-slate-400">{b.event_time}</span></td>
-                                  <td className="px-4 py-3 text-sm text-slate-700">{b.function_name}</td>
-                                  <td className="px-4 py-3 text-sm text-slate-700 text-center">{b.pax}</td>
-                                  <td className="px-4 py-3 text-sm text-slate-800 text-right font-medium">LKR {b.total.toLocaleString()}</td>
-                                  <td className="px-4 py-3 text-sm text-right font-semibold text-amber-600">LKR {(b.balance||0).toLocaleString()}</td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                      b.status === 'upcoming' ? 'bg-violet-100 text-violet-700' :
-                                      b.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                      'bg-red-100 text-red-700'}`}>
-                                      {b.status}
+                              {filtered.map((order, idx) => (
+                                <tr key={order.id} className={`hover:bg-slate-50 transition-colors ${
+                                  order.status === 'void' ? 'opacity-50' : ''
+                                }`}>
+                                  <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">
+                                    {order.order_number ? `#${String(order.order_number).padStart(3,'0')}` : `—`}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                      {typeIcon(order.type)}
+                                      <span className="text-slate-700">{typeLabel(order.type)}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                                    {order.reference || '—'}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-col gap-0.5 max-w-[200px]">
+                                      {(order.items || []).map((item, i) => (
+                                        <span key={i} className="text-xs text-slate-600">
+                                          {item.product_name} <span className="font-semibold text-cyan-600">x{item.quantity}</span>
+                                        </span>
+                                      ))}
+                                      {(!order.items || order.items.length === 0) && <span className="text-xs text-slate-400">—</span>}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap">
+                                    LKR {(order.subtotal || 0).toFixed(2)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap">
+                                    LKR {(order.tax || 0).toFixed(2)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
+                                    LKR {(order.total || 0).toFixed(2)}
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-600 capitalize whitespace-nowrap">
+                                    {methodLabel(order.payment_method)}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${statusBadge(order.status)}`}>
+                                      {order.status}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                      <button onClick={() => setViewingEventBooking(b)}
-                                        className="p-1.5 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg transition-colors" title="View PDF">
-                                        <FileText size={14} />
-                                      </button>
-                                      <button onClick={() => printPDF(b)}
-                                        className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors" title="Print">
-                                        <Printer size={14} />
-                                      </button>
-                                    </div>
+                                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                                    {order.created_at
+                                      ? new Date(order.created_at).toLocaleString('en-GB', {
+                                          day: '2-digit', month: 'short', year: 'numeric',
+                                          hour: '2-digit', minute: '2-digit'
+                                        })
+                                      : '—'}
                                   </td>
                                 </tr>
                               ))}
                               {filtered.length === 0 && (
-                                <tr><td colSpan={9} className="px-6 py-8 text-center text-slate-500">No event bookings found</td></tr>
+                                <tr>
+                                  <td colSpan={10} className="px-6 py-10 text-center text-slate-400">
+                                    No orders found for the selected period
+                                  </td>
+                                </tr>
                               )}
                             </tbody>
                           </table>
                         </div>
-
-                        {/* Booking View Modal */}
-                        {viewingEventBooking && (
-                          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                              <div className="bg-gradient-to-r from-violet-600 to-purple-700 text-white p-6 rounded-t-2xl">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <h2 className="text-xl font-bold">Event Booking Details</h2>
-                                    <p className="text-violet-200 text-sm mt-1">ID: {viewingEventBooking.id}</p>
-                                  </div>
-                                  <button onClick={() => setViewingEventBooking(null)} className="p-2 hover:bg-white/20 rounded-lg transition-colors"><X size={20} /></button>
-                                </div>
-                              </div>
-                              <div className="p-6 space-y-5">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div><span className="text-xs text-slate-500 uppercase tracking-wide">Customer</span><p className="font-semibold text-slate-800 mt-0.5">{viewingEventBooking.customer_name}</p></div>
-                                  <div><span className="text-xs text-slate-500 uppercase tracking-wide">Phone</span><p className="font-semibold text-slate-800 mt-0.5">{viewingEventBooking.customer_phone}</p></div>
-                                  <div><span className="text-xs text-slate-500 uppercase tracking-wide">Event Date</span><p className="font-semibold text-slate-800 mt-0.5">{viewingEventBooking.event_date}</p></div>
-                                  <div><span className="text-xs text-slate-500 uppercase tracking-wide">Event Time</span><p className="font-semibold text-slate-800 mt-0.5">{viewingEventBooking.event_time}</p></div>
-                                  <div><span className="text-xs text-slate-500 uppercase tracking-wide">PAX</span><p className="font-semibold text-slate-800 mt-0.5">{viewingEventBooking.pax} persons</p></div>
-                                  <div><span className="text-xs text-slate-500 uppercase tracking-wide">Status</span>
-                                    <p className="mt-0.5"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${viewingEventBooking.status === 'upcoming' ? 'bg-violet-100 text-violet-700' : viewingEventBooking.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{viewingEventBooking.status}</span></p>
-                                  </div>
-                                </div>
-                                <div>
-                                  <h3 className="text-sm font-semibold text-violet-700 uppercase tracking-wide mb-2 pb-1 border-b border-slate-200">Function: {viewingEventBooking.function_name}</h3>
-                                  <table className="w-full text-sm"><thead><tr className="bg-violet-50"><th className="px-3 py-2 text-left text-xs font-semibold text-violet-700">Item</th><th className="px-3 py-2 text-center text-xs font-semibold text-violet-700">Qty</th><th className="px-3 py-2 text-right text-xs font-semibold text-violet-700">Price</th><th className="px-3 py-2 text-right text-xs font-semibold text-violet-700">Total</th></tr></thead>
-                                  <tbody className="divide-y divide-slate-100">{viewingEventBooking.items.map((item,i) => (<tr key={i}><td className="px-3 py-2">{item.name}</td><td className="px-3 py-2 text-center">{item.quantity}</td><td className="px-3 py-2 text-right">LKR {item.price.toFixed(2)}</td><td className="px-3 py-2 text-right font-medium">LKR {(item.price*item.quantity).toFixed(2)}</td></tr>))}</tbody></table>
-                                </div>
-                                <div className="bg-slate-50 rounded-xl p-4 space-y-2">
-                                  <div className="flex justify-between text-sm"><span className="text-slate-600">Subtotal</span><span className="font-medium">LKR {viewingEventBooking.total.toFixed(2)}</span></div>
-                                  <div className="flex justify-between text-sm"><span className="text-slate-600">Advance Paid</span><span className="font-medium text-emerald-600">LKR {(viewingEventBooking.advance_payment||0).toFixed(2)}</span></div>
-                                  <div className="flex justify-between text-base border-t pt-2 border-slate-200"><span className="font-bold text-violet-700">Balance Due</span><span className="font-bold text-violet-700">LKR {(viewingEventBooking.balance||0).toFixed(2)}</span></div>
-                                  <div className="flex justify-between text-xs text-slate-500"><span>Payment: {viewingEventBooking.payment_method}</span><span className="capitalize">{viewingEventBooking.payment_status}</span></div>
-                                </div>
-                                {viewingEventBooking.notes && <div className="bg-amber-50 rounded-xl p-3"><p className="text-sm text-amber-800"><span className="font-semibold">Notes:</span> {viewingEventBooking.notes}</p></div>}
-                              </div>
-                              <div className="flex gap-3 p-5 bg-slate-50 rounded-b-2xl border-t">
-                                <button onClick={() => { printPDF(viewingEventBooking); }} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors">
-                                  <Printer size={16} /> Print PDF
-                                </button>
-                                <button onClick={() => setViewingEventBooking(null)} className="flex items-center gap-2 px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-medium transition-colors">
-                                  <X size={16} /> Close
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </>
                     );
                   })()}
-
-                  {/* KOT Report */}
-                  {activeTab === 'kot' && (
-                    <>
-                      <div className="flex justify-end mb-4">
-                        <button
-                          onClick={() => {
-                            const flatData = kotOrders.flatMap(order => 
-                              order.items.map(item => ({
-                                order_number: order.order_number,
-                                table_no: order.table_no || '',
-                                room_no: order.room_no || '',
-                                product_name: item.product_name,
-                                quantity: item.quantity,
-                                status: order.status,
-                                created_at: order.created_at
-                              }))
-                            );
-                            downloadCSV(flatData, 'kot.csv');
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
-                        >
-                          <Download size={16} />
-                          Download CSV
-                        </button>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        {kotOrders.map((order) => (
-                          <div key={order.order_id} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <span className="font-bold text-slate-800">Order #{order.order_number}</span>
-                                {order.table_no && <span className="ml-3 text-sm text-slate-600">Table: {order.table_no}</span>}
-                                {order.room_no && <span className="ml-3 text-sm text-slate-600">Room: {order.room_no}</span>}
-                              </div>
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                order.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                order.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                'bg-slate-200 text-slate-700'
-                              }`}>
-                                {order.status}
-                              </span>
-                            </div>
-                            <div className="text-xs text-slate-500 mb-2">
-                              {new Date(order.created_at).toLocaleString()}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {order.items.map((item, idx) => (
-                                <div key={idx} className="flex justify-between bg-white px-3 py-2 rounded-lg">
-                                  <span className="text-sm text-slate-700">{item.product_name}</span>
-                                  <span className="text-sm font-semibold text-cyan-600">×{item.quantity}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                        {kotOrders.length === 0 && (
-                          <div className="text-center py-8 text-slate-500">No KOT data available</div>
-                        )}
-                      </div>
-                    </>
-                  )}
                 </>
               )}
             </div>

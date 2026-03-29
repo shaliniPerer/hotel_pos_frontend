@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../store';
 import { useNavigate, Link } from 'react-router-dom';
 import {
@@ -6,8 +6,11 @@ import {
   CheckCircle, CalendarDays, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu as MenuIcon, ShoppingCart, TrendingUp, Calendar, ClipboardList,
   AlertTriangle, BedSingle, PlaneLanding, PlaneTakeoff, BookOpen,
-  Receipt, Tag, List, FileText,
+  Receipt, BarChart2, Printer, Download, FileText, Search,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import AppSidebar from '../components/AppSidebar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,10 +23,7 @@ type SubPage =
   | 'all-bookings'
   | 'calendar'
   | 'arrivals-departures'
-  | 'new-expense'
-  | 'expenses-list'
-  | 'new-category'
-  | 'categories-list';
+  | 'booking-report';
 
 interface RatePlanEntry { name: string; price: number; }
 
@@ -69,30 +69,6 @@ interface RoomBooking {
   updated_at: string;
 }
 
-interface ExpenseCategory {
-  id: string;
-  name: string;
-  description: string;
-  status: 'active' | 'inactive';
-  created_at: string;
-  updated_at: string;
-}
-
-interface Expense {
-  id: string;
-  expense_date: string;
-  category_id: string;
-  category_name: string;
-  expense_for: string;
-  amount: number;
-  reference_no: string;
-  note: string;
-  image?: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<RoomStatus, string> = {
@@ -132,10 +108,7 @@ const SUB_NAV: { id: SubPage; label: string; icon: React.ReactNode }[] = [
   { id: 'all-bookings',        label: 'All Bookings',          icon: <ClipboardList size={17} /> },
   { id: 'calendar',            label: 'Calendar',              icon: <Calendar size={17} /> },
   { id: 'arrivals-departures', label: 'Arrivals & Departures', icon: <PlaneLanding size={17} /> },
-  { id: 'new-expense',         label: 'New Expense',           icon: <Receipt size={17} /> },
-  { id: 'expenses-list',       label: 'Expenses List',         icon: <List size={17} /> },
-  { id: 'new-category',        label: 'New Category',          icon: <Tag size={17} /> },
-  { id: 'categories-list',     label: 'Categories List',       icon: <FileText size={17} /> },
+  { id: 'booking-report',      label: 'Booking Report',        icon: <FileText size={17} /> },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,6 +120,16 @@ export default function RoomService() {
   const navigate = useNavigate();
   const [showSidebar, setShowSidebar] = useState(false);
   const [activePage, setActivePage] = useState<SubPage>('dashboard');
+
+  // Booking Report state
+  const [rptFromDate, setRptFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [rptToDate, setRptToDate] = useState(new Date().toISOString().split('T')[0]);
+  const [rptStatus, setRptStatus] = useState('');
+  const [rptRefSearch, setRptRefSearch] = useState('');
+  const [rptResults, setRptResults] = useState<RoomBooking[]>([]);
+  const [rptHasSearched, setRptHasSearched] = useState(false);
+  const [rptLoading, setRptLoading] = useState(false);
+  const [rptError, setRptError] = useState('');
 
   // Data
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -204,61 +187,40 @@ export default function RoomService() {
   // Delete confirms
   const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
   const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null);
+  const [printingBooking, setPrintingBooking] = useState<RoomBooking | null>(null);
 
   // Calendar
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedCalendarRoom, setSelectedCalendarRoom] = useState('all');
 
-  // Expenses
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
-  const [expenseForm, setExpenseForm] = useState({
-    expense_date: new Date().toISOString().split('T')[0],
-    category_id: '',
-    expense_for: '',
-    amount: '',
-    reference_no: '',
-    image: '',
-    note: '',
-  });
-  const [expenseFormLoading, setExpenseFormLoading] = useState(false);
-  const [expenseFormError, setExpenseFormError] = useState('');
-  const [expenseFormSuccess, setExpenseFormSuccess] = useState('');
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
-
-  // Expense Category form
-  const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
-  const [categoryFormLoading, setCategoryFormLoading] = useState(false);
-  const [categoryFormError, setCategoryFormError] = useState('');
-  const [categoryFormSuccess, setCategoryFormSuccess] = useState('');
-  const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null);
-  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
-
   // ── Data fetching ──────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [roomsRes, bookingsRes, todayRes, expensesRes, catRes] = await Promise.all([
+      const [roomsRes, bookingsRes, todayRes] = await Promise.all([
         apiFetch('/api/rooms'),
         apiFetch('/api/rooms/bookings'),
         apiFetch('/api/rooms/bookings/today'),
-        apiFetch('/api/expenses'),
-        apiFetch('/api/expenses/categories'),
       ]);
       if (roomsRes.ok) setRooms(await roomsRes.json());
       if (bookingsRes.ok) setBookings(await bookingsRes.json());
       if (todayRes.ok) setTodayData(await todayRes.json());
-      if (expensesRes.ok) setExpenses(await expensesRes.json());
-      if (catRes.ok) setExpenseCategories(await catRes.json());
     } catch (err) {
       console.error('Room service fetch error:', err);
     } finally {
       setLoading(false);
     }
   }, [apiFetch]);
+
+  // ── Toast notification ────────────────────────────────────────────────────
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     if (user?.role === 'cashier') { navigate('/'); return; }
@@ -484,100 +446,90 @@ export default function RoomService() {
     fetchData();
   };
 
-  // ── Expense Category CRUD ──────────────────────────────────────────────────
+  // ── Dashboard PDF download ─────────────────────────────────────────────────
 
-  const resetCategoryForm = (cat?: ExpenseCategory) => {
-    setCategoryForm({ name: cat?.name || '', description: cat?.description || '' });
-    setEditingCategory(cat || null);
-    setCategoryFormError('');
-    setCategoryFormSuccess('');
-  };
+  const downloadDashboardPDF = () => {
+    const doc = new jsPDF();
+    const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-  const saveCategory = async () => {
-    if (!categoryForm.name.trim()) { setCategoryFormError('Category Name is required'); return; }
-    setCategoryFormLoading(true); setCategoryFormError('');
-    try {
-      const url = editingCategory ? `/api/expenses/categories/${editingCategory.id}` : '/api/expenses/categories';
-      const res = await apiFetch(url, {
-        method: editingCategory ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: categoryForm.name.trim(), description: categoryForm.description.trim() }),
+    // Title
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Room Management Report', 14, 16);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${dateStr}`, 14, 23);
+
+    // Summary stats
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary', 14, 32);
+    autoTable(doc, {
+      startY: 36,
+      head: [['Metric', 'Count']],
+      body: [
+        ['Total Rooms', String(totalRooms)],
+        ['Available', String(availableRooms)],
+        ['Occupied', String(occupiedRooms)],
+        ['Booked', String(bookedRooms)],
+        ['Cleaning', String(cleaningRooms)],
+        ["Today's Bookings", String(todayBookingsCount)],
+      ],
+      headStyles: { fillColor: [8, 145, 178] },
+      styles: { fontSize: 9 },
+      columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 40 } },
+    });
+
+    // Room status overview
+    const afterSummary = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Room Status Overview', 14, afterSummary);
+    autoTable(doc, {
+      startY: afterSummary + 4,
+      head: [['Room', 'Type', 'Status', 'Base Price (LKR)', 'Current Guest', 'Check-in', 'Check-out']],
+      body: rooms.map((room) => {
+        const active = bookings.find(
+          (b) => b.room_id === room.id && b.status !== 'cancelled' && b.checkin_date <= today && b.checkout_date > today
+        );
+        return [
+          room.name,
+          (room.room_type || 'standard').charAt(0).toUpperCase() + (room.room_type || 'standard').slice(1),
+          STATUS_LABELS[room.status],
+          Number(room.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }),
+          active ? active.customer_name : '—',
+          active ? active.checkin_date : '—',
+          active ? active.checkout_date : '—',
+        ];
+      }),
+      headStyles: { fillColor: [8, 145, 178] },
+      styles: { fontSize: 8 },
+    });
+
+    // Today's arrivals & departures
+    const afterRooms = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Today's Arrivals & Departures", 14, afterRooms);
+    const adRows = [
+      ...todayData.arrivals.map((b) => ['Arrival', b.customer_name, b.room_name, b.checkin_date, b.checkout_date, b.payment_status || '—']),
+      ...todayData.departures.map((b) => ['Departure', b.customer_name, b.room_name, b.checkin_date, b.checkout_date, b.payment_status || '—']),
+    ];
+    if (adRows.length > 0) {
+      autoTable(doc, {
+        startY: afterRooms + 4,
+        head: [['Type', 'Guest', 'Room', 'Check-in', 'Check-out', 'Payment']],
+        body: adRows,
+        headStyles: { fillColor: [8, 145, 178] },
+        styles: { fontSize: 8 },
       });
-      if (!res.ok) { setCategoryFormError((await res.json()).error || 'Failed to save category'); return; }
-      setCategoryFormSuccess(editingCategory ? 'Category updated!' : 'Category created!');
-      resetCategoryForm();
-      fetchData();
-    } finally { setCategoryFormLoading(false); }
-  };
-
-  const deleteCategory = async (id: string) => {
-    await apiFetch(`/api/expenses/categories/${id}`, { method: 'DELETE' });
-    setDeletingCategoryId(null);
-    fetchData();
-  };
-
-  const toggleCategoryStatus = async (cat: ExpenseCategory) => {
-    await apiFetch(`/api/expenses/categories/${cat.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: cat.status === 'active' ? 'inactive' : 'active' }),
-    });
-    fetchData();
-  };
-
-  // ── Expense CRUD ───────────────────────────────────────────────────────────
-
-  const resetExpenseForm = (exp?: Expense) => {
-    setExpenseForm({
-      expense_date: exp?.expense_date || new Date().toISOString().split('T')[0],
-      category_id: exp?.category_id || '',
-      expense_for: exp?.expense_for || '',
-      amount: exp ? String(exp.amount) : '',
-      reference_no: exp?.reference_no || '',
-      image: exp?.image || '',
-      note: exp?.note || '',
-    });
-    setEditingExpense(exp || null);
-    setExpenseFormError('');
-    setExpenseFormSuccess('');
-  };
-
-  const saveExpense = async () => {
-    const { expense_date, category_id, expense_for, amount } = expenseForm;
-    if (!expense_date || !category_id || !expense_for.trim() || !amount) {
-      setExpenseFormError('Please fill in all required fields'); return;
+    } else {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text('No arrivals or departures today.', 14, afterRooms + 8);
     }
-    const parsedAmt = parseFloat(amount);
-    if (isNaN(parsedAmt) || parsedAmt < 0) { setExpenseFormError('Amount must be a valid number'); return; }
-    setExpenseFormLoading(true); setExpenseFormError('');
-    try {
-      const cat = expenseCategories.find((c) => c.id === category_id);
-      const url = editingExpense ? `/api/expenses/${editingExpense.id}` : '/api/expenses';
-      const res = await apiFetch(url, {
-        method: editingExpense ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expense_date,
-          category_id,
-          category_name: cat?.name || '',
-          expense_for: expense_for.trim(),
-          amount: parsedAmt,
-          reference_no: expenseForm.reference_no.trim(),
-          image: expenseForm.image || '',
-          note: expenseForm.note.trim(),
-        }),
-      });
-      if (!res.ok) { setExpenseFormError((await res.json()).error || 'Failed to save expense'); return; }
-      setExpenseFormSuccess(editingExpense ? 'Expense updated!' : 'Expense saved!');
-      resetExpenseForm();
-      fetchData();
-    } finally { setExpenseFormLoading(false); }
-  };
 
-  const deleteExpense = async (id: string) => {
-    await apiFetch(`/api/expenses/${id}`, { method: 'DELETE' });
-    setDeletingExpenseId(null);
-    fetchData();
+    doc.save(`room-report-${today}.pdf`);
   };
 
   // ── Calendar helpers ───────────────────────────────────────────────────────
@@ -623,43 +575,29 @@ export default function RoomService() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
-      {showSidebar && (
-        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setShowSidebar(false)} />
+      {/* ── Toast notification ──────────────────────────────────────────────── */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-9999 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-lg text-sm font-semibold transition-all animate-in fade-in slide-in-from-top-2 duration-300 ${
+          toast.type === 'success'
+            ? 'bg-emerald-600 text-white'
+            : 'bg-red-600 text-white'
+        }`}>
+          <CheckCircle size={17} className="shrink-0" />
+          {toast.message}
+        </div>
       )}
-
-      {/* ══ Main Sidebar ══ */}
-      <div className={`${showSidebar ? 'flex' : 'hidden'} md:flex flex-col w-64 bg-slate-900 text-slate-300 fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto shrink-0 overflow-y-auto`}>
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0">
-          <h1 className="text-lg font-bold text-white leading-tight">The Tranquil Restaurant</h1>
-          <button onClick={() => setShowSidebar(false)} className="md:hidden text-slate-400 hover:text-white">
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Global navigation */}
-        <div className="px-4 pt-4 pb-2 space-y-0.5 shrink-0">
-          <Link to="/" className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-800 rounded-xl transition-colors text-sm">
-            <ShoppingCart size={17} /><span>POS Terminal</span>
-          </Link>
-          <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-800 rounded-xl transition-colors text-sm">
-            <TrendingUp size={17} /><span>Dashboard & Analytics</span>
-          </Link>
-          <Link to="/events" className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-800 rounded-xl transition-colors text-sm">
-            <CalendarDays size={17} /><span>Event Management</span>
-          </Link>
-        </div>
-
-        {/* Room Service sub-navigation */}
-        <div className="px-4 pt-3 pb-4 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 px-3 mb-2">Room Service</p>
-          <div className="space-y-0.5">
+      <AppSidebar
+        show={showSidebar}
+        onClose={() => setShowSidebar(false)}
+        roomManagementSlot={
+          <>
             {SUB_NAV.map((item) => (
               <button
                 key={item.id}
                 onClick={() => { setActivePage(item.id); setShowSidebar(false); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-sm text-left ${
                   activePage === item.id
-                    ? 'bg-cyan-600 text-white font-semibold'
+                    ? 'bg-teal-600 text-white font-semibold'
                     : 'hover:bg-slate-800 text-slate-300'
                 }`}
               >
@@ -667,28 +605,9 @@ export default function RoomService() {
                 <span>{item.label}</span>
               </button>
             ))}
-          </div>
-        </div>
-
-        {/* User footer */}
-        <div className="p-4 border-t border-slate-800 shrink-0">
-          <div className="flex items-center gap-3 mb-3 px-2">
-            <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold text-sm shrink-0">
-              {user?.name?.charAt(0) || 'U'}
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
-              <p className="text-xs text-slate-500 capitalize">{user?.role}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <LogOut size={15} /> Sign Out
-          </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* ══ Content area ══ */}
       <div className="flex-1 overflow-y-auto min-w-0">
@@ -726,6 +645,18 @@ export default function RoomService() {
               ════════════════════════════════ */}
               {activePage === 'dashboard' && (
                 <div className="space-y-6">
+                  {/* Dashboard header with download button */}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-slate-800">Room Dashboard</h3>
+                    <button
+                      onClick={downloadDashboardPDF}
+                      disabled={rooms.length === 0}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                    >
+                      <Download size={15} /> Download Report
+                    </button>
+                  </div>
+
                   {/* Stats row */}
                   <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
                     <StatCard icon={<BedDouble size={18} />}   iconBg="bg-cyan-100 text-cyan-600"      label="Total Rooms"      value={totalRooms} />
@@ -1297,6 +1228,10 @@ export default function RoomService() {
                                         className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
                                         <Edit2 size={14} />
                                       </button>
+                                      <button onClick={() => setPrintingBooking(b)} title="Print Reservation"
+                                        className="p-1.5 text-cyan-500 hover:bg-cyan-50 rounded-lg transition-colors">
+                                        <Printer size={14} />
+                                      </button>
                                       <button onClick={() => setDeletingBookingId(b.id)} title="Delete"
                                         className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors">
                                         <Trash2 size={14} />
@@ -1364,7 +1299,8 @@ export default function RoomService() {
                     {/* Legend */}
                     <div className="flex gap-5 mb-5 flex-wrap">
                       <LegendDot color="bg-amber-400" label="Today" />
-                      <LegendDot color="bg-cyan-500" label="Booked" />
+                      <LegendDot color="bg-cyan-500" label="Upcoming Booking" />
+                      <LegendDot color="bg-slate-300" label="Past Booking" />
                       <LegendDot color="bg-slate-100" label="Available" />
                     </div>
 
@@ -1383,15 +1319,16 @@ export default function RoomService() {
                         const ds = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                         const booked = getBookingsForDate(ds).length;
                         const isToday = ds === today;
+                        const isPast = ds < today;
                         const isSel = ds === selectedDate;
                         return (
                           <button
                             key={ds}
                             onClick={() => setSelectedDate(isSel ? null : ds)}
                             className={`
-                              aspect-square flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all
+                              h-10 flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all
                               ${isSel ? 'ring-2 ring-cyan-500 ring-offset-1 scale-105' : ''}
-                              ${isToday ? 'bg-amber-400 text-white font-bold shadow' : booked > 0 ? 'bg-cyan-500 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}
+                              ${isToday ? 'bg-amber-400 text-white font-bold shadow' : booked > 0 && isPast ? 'bg-slate-300 text-slate-600' : booked > 0 ? 'bg-cyan-500 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}
                             `}
                           >
                             <span>{day}</span>
@@ -1524,289 +1461,284 @@ export default function RoomService() {
               )}
 
               {/* ════════════════════════════════
-                  NEW EXPENSE
+                  7. BOOKING REPORT
               ════════════════════════════════ */}
-              {activePage === 'new-expense' && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800">Expense <span className="text-sm font-normal text-slate-500">Add/Update Expense</span></h3>
+              {activePage === 'booking-report' && (() => {
+                const formatDate = (d: string) => {
+                  if (!d) return '—';
+                  const [y, m, day] = d.split('-');
+                  return `${day}-${m}-${y}`;
+                };
+
+                const fetchReport = async () => {
+                  if (!rptFromDate || !rptToDate) { setRptError('Please enter valid dates'); return; }
+                  if (rptFromDate > rptToDate) { setRptError('From Date cannot be after To Date'); return; }
+                  setRptError('');
+                  setRptLoading(true);
+                  try {
+                    const res = await apiFetch('/api/rooms/bookings');
+                    if (res.ok) {
+                      const all: RoomBooking[] = await res.json();
+                      let filtered = all.filter(b =>
+                        b.checkin_date >= rptFromDate && b.checkin_date <= rptToDate
+                      );
+                      if (rptStatus) filtered = filtered.filter(b => b.status === rptStatus);
+                      setRptResults(filtered);
+                    } else {
+                      setRptResults([]);
+                    }
+                    setRptHasSearched(true);
+                  } catch {
+                    setRptResults([]);
+                    setRptHasSearched(true);
+                  } finally {
+                    setRptLoading(false);
+                  }
+                };
+
+                const rptFiltered = rptRefSearch.trim()
+                  ? rptResults.filter(b =>
+                      (b.reservation_number || '').toLowerCase().includes(rptRefSearch.trim().toLowerCase())
+                    )
+                  : rptResults;
+
+                const totalAmount = rptFiltered.reduce((s, b) => s + (b.total_amount || 0), 0);
+
+                const handleRptClose = () => {
+                  setRptHasSearched(false);
+                  setRptResults([]);
+                  setRptRefSearch('');
+                  setRptError('');
+                  setRptFromDate(today);
+                  setRptToDate(today);
+                  setRptStatus('');
+                };
+
+                const downloadPDF = () => {
+                  const win = window.open('', '_blank', 'width=1100,height=780');
+                  if (!win) return;
+                  const rows = rptFiltered.map((b, i) => `
+                    <tr>
+                      <td>${i + 1}</td>
+                      <td>${b.reservation_number || '—'}</td>
+                      <td>${b.customer_name}</td>
+                      <td>${b.contact_number || '—'}</td>
+                      <td>${b.room_name || '—'}</td>
+                      <td style="text-transform:capitalize">${b.room_type || '—'}</td>
+                      <td>${formatDate(b.checkin_date)}</td>
+                      <td>${formatDate(b.checkout_date)}</td>
+                      <td><span class="badge ${b.status}">${b.status.replace('_',' ')}</span></td>
+                      <td style="text-align:right">LKR ${(b.total_amount || 0).toFixed(2)}</td>
+                    </tr>`).join('');
+                  win.document.write(`<!DOCTYPE html><html><head><title>Booking Report</title><style>
+                    *{box-sizing:border-box;margin:0;padding:0;}
+                    body{font-family:Arial,sans-serif;font-size:11px;color:#1e293b;padding:24px;}
+                    .header{text-align:center;border-bottom:3px solid #0d9488;padding-bottom:14px;margin-bottom:18px;}
+                    .title{font-size:22px;font-weight:700;color:#0d9488;}.sub{font-size:11px;color:#64748b;margin-top:3px;}
+                    .filters{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+                    .filter-item{background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;padding:5px 10px;font-size:10px;}
+                    .filter-item strong{color:#0f766e;}
+                    .summary{display:flex;gap:12px;margin-bottom:14px;}
+                    .card{border-radius:8px;padding:8px 14px;min-width:120px;}
+                    table{width:100%;border-collapse:collapse;}
+                    th{background:#0d9488;color:white;padding:7px 9px;text-align:left;font-size:10px;}
+                    td{padding:6px 9px;border-bottom:1px solid #f1f5f9;font-size:10px;}
+                    tr:nth-child(even){background:#f0fdfa;}
+                    .total-row td{font-weight:700;background:#ccfbf1;border-top:2px solid #0d9488;}
+                    .badge{padding:2px 7px;border-radius:8px;font-size:9px;font-weight:600;text-transform:capitalize;}
+                    .badge.confirmed{background:#dbeafe;color:#1d4ed8;}
+                    .badge.checked_in{background:#fef3c7;color:#92400e;}
+                    .badge.checked_out{background:#d1fae5;color:#065f46;}
+                    .badge.cancelled{background:#fee2e2;color:#991b1b;}
+                    .footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:18px;border-top:1px solid #e2e8f0;padding-top:10px;}
+                  </style></head><body>
+                  <div class="header">
+                    <div class="title">HotelMate POS</div>
+                    <div class="sub">Room Booking Report</div>
+                    <div class="sub">Generated: ${new Date().toLocaleString()}</div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                    {expenseFormError && (
-                      <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-100 mb-5">
-                        <AlertTriangle size={14} className="shrink-0" /> {expenseFormError}
-                      </div>
-                    )}
-                    {expenseFormSuccess && (
-                      <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100 mb-5">
-                        <CheckCircle size={14} className="shrink-0" /> {expenseFormSuccess}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Left column */}
-                      <div className="space-y-4">
-                        <FormField label="Expense Date *">
-                          <input type="date" value={expenseForm.expense_date}
-                            onChange={(e) => setExpenseForm({ ...expenseForm, expense_date: e.target.value })}
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                        </FormField>
-                        <FormField label="Category *">
-                          <select value={expenseForm.category_id}
-                            onChange={(e) => setExpenseForm({ ...expenseForm, category_id: e.target.value })}
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 bg-white">
-                            <option value="">-Select-</option>
-                            {expenseCategories.filter((c) => c.status === 'active').map((c) => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
+                  <div class="filters">
+                    <div class="filter-item"><strong>Check-in From:</strong> ${formatDate(rptFromDate)}</div>
+                    <div class="filter-item"><strong>Check-in To:</strong> ${formatDate(rptToDate)}</div>
+                    ${rptStatus ? `<div class="filter-item"><strong>Status:</strong> ${rptStatus.replace('_',' ')}</div>` : ''}
+                    ${rptRefSearch ? `<div class="filter-item"><strong>Res. No:</strong> ${rptRefSearch}</div>` : ''}
+                  </div>
+                  <div class="summary">
+                    <div class="card" style="background:#f0fdfa;border:1px solid #99f6e4">
+                      <div style="font-size:9px;color:#0f766e;font-weight:700;text-transform:uppercase">Records</div>
+                      <div style="font-size:18px;font-weight:700;color:#0d9488">${rptFiltered.length}</div>
+                    </div>
+                    <div class="card" style="background:#f0fdfa;border:1px solid #99f6e4">
+                      <div style="font-size:9px;color:#0f766e;font-weight:700;text-transform:uppercase">Total Revenue</div>
+                      <div style="font-size:18px;font-weight:700;color:#0d9488">LKR ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+                    </div>
+                  </div>
+                  <table><thead><tr>
+                    <th>#</th><th>Res. No</th><th>Customer</th><th>Contact</th>
+                    <th>Room No</th><th>Room Type</th><th>Check-in</th><th>Check-out</th><th>Status</th><th>Amount</th>
+                  </tr></thead>
+                  <tbody>${rows}
+                    <tr class="total-row">
+                      <td colspan="9" style="text-align:right">Total</td>
+                      <td style="text-align:right">LKR ${totalAmount.toFixed(2)}</td>
+                    </tr>
+                  </tbody></table>
+                  <div class="footer">HotelMate POS — Room Booking Report — ${rptFiltered.length} record(s)</div>
+                  </body></html>`);
+                  win.document.close();
+                  setTimeout(() => win.print(), 400);
+                };
+
+                const downloadCSV = () => {
+                  if (!rptFiltered.length) return;
+                  const headers = ['#','Res. No','Customer','Contact','Room No','Room Type','Check-in','Check-out','Status','Amount'];
+                  const rows = rptFiltered.map((b, i) => [
+                    i+1, b.reservation_number||'', b.customer_name, b.contact_number||'',
+                    b.room_name||'', b.room_type||'',
+                    b.checkin_date, b.checkout_date,
+                    b.status, b.total_amount||0,
+                  ]);
+                  const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+                  const blob = new Blob([csv],{type:'text/csv'});
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a'); a.href=url; a.download=`booking_report_${rptFromDate}_${rptToDate}.csv`; a.click();
+                  URL.revokeObjectURL(url);
+                };
+
+                return (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-800">Booking Report</h3>
+                      <p className="text-sm text-slate-500 mt-0.5">Filter by check-in date range, status and reservation number</p>
+                    </div>
+
+                    {/* Filter Card */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                      {rptError && <p className="text-red-500 text-sm font-medium mb-4">{rptError}</p>}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                        <div className="flex items-center gap-3">
+                          <label className="text-sm font-semibold text-slate-600 w-32 shrink-0">From Date</label>
+                          <input type="date" value={rptFromDate} onChange={e => setRptFromDate(e.target.value)}
+                            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-sm font-semibold text-slate-600 w-32 shrink-0">To Date</label>
+                          <input type="date" value={rptToDate} onChange={e => setRptToDate(e.target.value)}
+                            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-sm font-semibold text-slate-600 w-32 shrink-0">Status</label>
+                          <select value={rptStatus} onChange={e => setRptStatus(e.target.value)}
+                            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white">
+                            <option value="">-All-</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="checked_in">Checked In</option>
+                            <option value="checked_out">Checked Out</option>
+                            <option value="cancelled">Cancelled</option>
                           </select>
-                        </FormField>
-                        <FormField label="Expense for *">
-                          <input type="text" value={expenseForm.expense_for}
-                            onChange={(e) => setExpenseForm({ ...expenseForm, expense_for: e.target.value })}
-                            placeholder="What is this expense for?"
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                        </FormField>
-                        <FormField label="Amount *">
-                          <input type="number" min="0" step="0.01" value={expenseForm.amount}
-                            onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                            placeholder="0.00"
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                        </FormField>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-sm font-semibold text-slate-600 w-32 shrink-0">Res. No</label>
+                          <div className="flex-1 relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input type="text" value={rptRefSearch} onChange={e => setRptRefSearch(e.target.value)}
+                              placeholder="Search by reservation number..."
+                              className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                          </div>
+                        </div>
                       </div>
-                      {/* Right column */}
-                      <div className="space-y-4">
-                        <FormField label="Reference No.">
-                          <input type="text" value={expenseForm.reference_no}
-                            onChange={(e) => setExpenseForm({ ...expenseForm, reference_no: e.target.value })}
-                            placeholder="e.g. INV-001"
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                        </FormField>
-                        <FormField label="Image">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => setExpenseForm(f => ({ ...f, image: reader.result as string }));
-                              reader.readAsDataURL(file);
-                            }}
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                          {expenseForm.image && (
-                            <div className="relative mt-2">
-                              <img src={expenseForm.image} alt="Expense" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
-                              <button
-                                type="button"
-                                onClick={() => setExpenseForm(f => ({ ...f, image: '' }))}
-                                className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 transition-colors"
-                              >
-                                <X size={12} />
-                              </button>
+                      <div className="flex justify-center gap-4">
+                        <button onClick={fetchReport} disabled={rptLoading}
+                          className="px-10 py-2.5 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors text-sm">
+                          {rptLoading ? 'Loading...' : 'Show'}
+                        </button>
+                        <button onClick={handleRptClose}
+                          className="px-10 py-2.5 bg-teal-500 hover:bg-teal-600 text-white font-semibold rounded-lg transition-colors text-sm">
+                          Close
+                        </button>
+                      </div>
+                    </div>
+
+                    {rptHasSearched && (
+                      <>
+                        {/* Summary + Download */}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex gap-3">
+                            <div className="bg-teal-50 border border-teal-100 rounded-xl px-4 py-2">
+                              <p className="text-xs font-bold uppercase tracking-wide text-teal-500">Records</p>
+                              <p className="text-xl font-bold text-teal-700">{rptFiltered.length}</p>
                             </div>
-                          )}
-                        </FormField>
-                        <FormField label="Note">
-                          <textarea value={expenseForm.note}
-                            onChange={(e) => setExpenseForm({ ...expenseForm, note: e.target.value })}
-                            placeholder="Additional notes…"
-                            rows={4}
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none" />
-                        </FormField>
-                      </div>
-                    </div>
-                    <div className="flex gap-3 pt-6 justify-center">
-                      <button onClick={saveExpense} disabled={expenseFormLoading}
-                        className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60">
-                        {expenseFormLoading ? 'Saving…' : 'Save'}
-                      </button>
-                      <button onClick={() => resetExpenseForm()}
-                        className="px-8 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 transition-colors">
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+                            <div className="bg-teal-50 border border-teal-100 rounded-xl px-4 py-2">
+                              <p className="text-xs font-bold uppercase tracking-wide text-teal-500">Total Revenue</p>
+                              <p className="text-xl font-bold text-teal-700">LKR {totalAmount.toLocaleString(undefined,{minimumFractionDigits:2})}</p>
+                            </div>
+                          </div>
+                          <div className="ml-auto flex gap-2">
+                            <button onClick={downloadPDF} disabled={!rptFiltered.length}
+                              className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
+                              <FileText className="w-3.5 h-3.5" /> Download PDF
+                            </button>
+                            <button onClick={downloadCSV} disabled={!rptFiltered.length}
+                              className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
+                              <Download className="w-3.5 h-3.5" /> Download CSV
+                            </button>
+                          </div>
+                        </div>
 
-              {/* ════════════════════════════════
-                  EXPENSES LIST
-              ════════════════════════════════ */}
-              {activePage === 'expenses-list' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-800">Expenses List <span className="text-sm font-normal text-slate-500">View/Search Expenses</span></h3>
-                    </div>
-                    <button onClick={() => { resetExpenseForm(); setActivePage('new-expense'); }}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 text-white rounded-xl text-sm font-semibold hover:bg-cyan-700 transition-colors">
-                      <Plus size={15} /> New Expense
-                    </button>
-                  </div>
-                  {expenses.length === 0 ? (
-                    <EmptyState icon={<Receipt size={32} />} message="No expenses recorded yet." action="Add First Expense" onAction={() => { resetExpenseForm(); setActivePage('new-expense'); }} />
-                  ) : (
-                    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-slate-50 border-b border-slate-100">
-                            <tr>
-                              {['Date', 'Category', 'Reference No.', 'Expense for', 'Amount', 'Image', 'Note', 'Created by', 'Actions'].map((h) => (
-                                <th key={h} className="px-4 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {expenses.map((e) => (
-                              <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
-                                <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">{e.expense_date}</td>
-                                <td className="px-4 py-3.5 font-semibold text-slate-800">{e.category_name || '—'}</td>
-                                <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">{e.reference_no || '—'}</td>
-                                <td className="px-4 py-3.5 text-slate-700">{e.expense_for}</td>
-                                <td className="px-4 py-3.5 font-semibold text-slate-800 whitespace-nowrap">{Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                <td className="px-4 py-3.5">
-                                  {e.image
-                                    ? <img src={e.image} alt="expense" className="w-12 h-10 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(e.image, '_blank')} />
-                                    : <span className="text-slate-400">—</span>}
-                                </td>
-                                <td className="px-4 py-3.5 text-slate-500 max-w-xs truncate">{e.note || '—'}</td>
-                                <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">{e.created_by || '—'}</td>
-                                <td className="px-4 py-3.5">
-                                  <div className="flex items-center gap-1">
-                                    <button onClick={() => { resetExpenseForm(e); setActivePage('new-expense'); }} title="Edit"
-                                      className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
-                                      <Edit2 size={15} />
-                                    </button>
-                                    <button onClick={() => setDeletingExpenseId(e.id)} title="Delete"
-                                      className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors">
-                                      <Trash2 size={15} />
-                                    </button>
-                                  </div>
-                                </td>
+                        {/* Table */}
+                        <div className="overflow-x-auto rounded-xl border border-slate-100">
+                          <table className="w-full text-left border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-teal-600 text-white">
+                                <th className="px-3 py-3 font-semibold">#</th>
+                                <th className="px-3 py-3 font-semibold">Res. No</th>
+                                <th className="px-3 py-3 font-semibold">Customer</th>
+                                <th className="px-3 py-3 font-semibold">Contact</th>
+                                <th className="px-3 py-3 font-semibold">Room No</th>
+                                <th className="px-3 py-3 font-semibold">Room Type</th>
+                                <th className="px-3 py-3 font-semibold">Check-in</th>
+                                <th className="px-3 py-3 font-semibold">Check-out</th>
+                                <th className="px-3 py-3 font-semibold text-center">Status</th>
+                                <th className="px-3 py-3 font-semibold text-right">Amount</th>
                               </tr>
-                            ))}
-                          </tbody>
-                          <tfoot className="bg-slate-50 border-t border-slate-200">
-                            <tr>
-                              <td colSpan={4} className="px-4 py-3 text-xs font-bold text-slate-600 uppercase tracking-wide">Total</td>
-                              <td className="px-4 py-3 font-bold text-slate-800">
-                                {expenses.reduce((s, e) => s + Number(e.amount), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                              </td>
-                              <td colSpan={4} />
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ════════════════════════════════
-                  NEW CATEGORY
-              ════════════════════════════════ */}
-              {activePage === 'new-category' && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800">Expense Category <span className="text-sm font-normal text-slate-500">Add/Update Expense Category</span></h3>
-                  </div>
-                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 max-w-lg">
-                    {categoryFormError && (
-                      <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3 border border-red-100 mb-5">
-                        <AlertTriangle size={14} className="shrink-0" /> {categoryFormError}
-                      </div>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {rptFiltered.map((b, i) => (
+                                <tr key={b.id} className="hover:bg-teal-50 transition-colors">
+                                  <td className="px-3 py-3 text-slate-400">{i + 1}</td>
+                                  <td className="px-3 py-3 font-mono text-slate-700 text-xs">{b.reservation_number || '—'}</td>
+                                  <td className="px-3 py-3 font-medium text-slate-800">{b.customer_name}</td>
+                                  <td className="px-3 py-3 text-slate-600">{b.contact_number || '—'}</td>
+                                  <td className="px-3 py-3 font-semibold text-teal-700">{b.room_name || '—'}</td>
+                                  <td className="px-3 py-3 capitalize text-slate-600">{b.room_type || '—'}</td>
+                                  <td className="px-3 py-3 text-slate-700 whitespace-nowrap">{formatDate(b.checkin_date)}</td>
+                                  <td className="px-3 py-3 text-slate-700 whitespace-nowrap">{formatDate(b.checkout_date)}</td>
+                                  <td className="px-3 py-3 text-center">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${BOOKING_STATUS_STYLES[b.status] || 'bg-slate-100 text-slate-600'}`}>
+                                      {b.status.replace('_', ' ')}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3 text-right font-semibold text-slate-800">LKR {(b.total_amount || 0).toLocaleString(undefined,{minimumFractionDigits:2})}</td>
+                                </tr>
+                              ))}
+                              {rptFiltered.length === 0 && (
+                                <tr><td colSpan={10} className="px-6 py-10 text-center text-slate-500">No bookings found for the selected filters</td></tr>
+                              )}
+                              {rptFiltered.length > 0 && (
+                                <tr className="bg-teal-50 font-bold">
+                                  <td colSpan={9} className="px-3 py-3 text-right text-slate-700">Total</td>
+                                  <td className="px-3 py-3 text-right text-teal-700">LKR {totalAmount.toLocaleString(undefined,{minimumFractionDigits:2})}</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
-                    {categoryFormSuccess && (
-                      <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100 mb-5">
-                        <CheckCircle size={14} className="shrink-0" /> {categoryFormSuccess}
-                      </div>
-                    )}
-                    <div className="space-y-4">
-                      <FormField label="Category Name *">
-                        <input type="text" value={categoryForm.name}
-                          onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                          placeholder="e.g. Utilities, Salaries…"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                      </FormField>
-                      <FormField label="Description">
-                        <textarea value={categoryForm.description}
-                          onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                          placeholder="Optional description"
-                          rows={3}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none" />
-                      </FormField>
-                    </div>
-                    <div className="flex gap-3 pt-6 justify-center">
-                      <button onClick={saveCategory} disabled={categoryFormLoading}
-                        className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60">
-                        {categoryFormLoading ? 'Saving…' : 'Save'}
-                      </button>
-                      <button onClick={() => resetCategoryForm()}
-                        className="px-8 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 transition-colors">
-                        Close
-                      </button>
-                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {/* ════════════════════════════════
-                  CATEGORIES LIST
-              ════════════════════════════════ */}
-              {activePage === 'categories-list' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-800">Expense Category List</h3>
-                    </div>
-                    <button onClick={() => { resetCategoryForm(); setActivePage('new-category'); }}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 text-white rounded-xl text-sm font-semibold hover:bg-cyan-700 transition-colors">
-                      <Plus size={15} /> New Category
-                    </button>
-                  </div>
-                  {expenseCategories.length === 0 ? (
-                    <EmptyState icon={<Tag size={32} />} message="No expense categories yet." action="Add First Category" onAction={() => { resetCategoryForm(); setActivePage('new-category'); }} />
-                  ) : (
-                    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-100">
-                          <tr>
-                            {['Category Name', 'Description', 'Status', 'Action'].map((h) => (
-                              <th key={h} className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {expenseCategories.map((cat) => (
-                            <tr key={cat.id} className="hover:bg-slate-50/70 transition-colors">
-                              <td className="px-5 py-3.5 font-semibold text-slate-800">{cat.name}</td>
-                              <td className="px-5 py-3.5 text-slate-500 max-w-xs truncate">{cat.description || '—'}</td>
-                              <td className="px-5 py-3.5">
-                                <button onClick={() => toggleCategoryStatus(cat)}
-                                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${cat.status === 'active' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-                                  {cat.status === 'active' ? 'Active' : 'Inactive'}
-                                </button>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => { resetCategoryForm(cat); setActivePage('new-category'); }} title="Edit"
-                                    className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
-                                    <Edit2 size={15} />
-                                  </button>
-                                  <button onClick={() => setDeletingCategoryId(cat.id)} title="Delete"
-                                    className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors">
-                                    <Trash2 size={15} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           )}
         </main>
@@ -2069,27 +2001,217 @@ export default function RoomService() {
         </Modal>
       )}
 
-      {/* Delete expense */}
-      {deletingExpenseId && (
-        <Modal title="Delete Expense" onClose={() => setDeletingExpenseId(null)}>
-          <p className="text-slate-600 text-sm mb-5">Permanently delete this expense?</p>
-          <div className="flex gap-3">
-            <button onClick={() => setDeletingExpenseId(null)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm hover:bg-slate-50">Cancel</button>
-            <button onClick={() => deleteExpense(deletingExpenseId)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">Delete</button>
-          </div>
-        </Modal>
-      )}
+      {/* ── Print Reservation Modal ─────────────────────────────────────────── */}
+      {printingBooking && (() => {
+        const pb = printingBooking as any;
+        const nights = (pb.checkin_date && pb.checkout_date)
+          ? Math.max(0, Math.ceil((new Date(pb.checkout_date).getTime() - new Date(pb.checkin_date).getTime()) / 86400000))
+          : 0;
+        const downloadPdf = async () => {
+          const { default: jsPDF } = await import('jspdf');
+          const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const margin = 15;
+          let y = 20;
 
-      {/* Delete expense category */}
-      {deletingCategoryId && (
-        <Modal title="Delete Category" onClose={() => setDeletingCategoryId(null)}>
-          <p className="text-slate-600 text-sm mb-5">Permanently delete this category?</p>
-          <div className="flex gap-3">
-            <button onClick={() => setDeletingCategoryId(null)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm hover:bg-slate-50">Cancel</button>
-            <button onClick={() => deleteCategory(deletingCategoryId)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">Delete</button>
+          // ── Hotel header ──────────────────────────────────────────────────
+          doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+          doc.text('The Tranquil Hotel & Restaurant', pageWidth / 2, y, { align: 'center' });
+          y += 6;
+          doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+          doc.text('No.194 / 1, Makola South, Makola, Sri Lanka', pageWidth / 2, y, { align: 'center' });
+          y += 5;
+          doc.text('+94 11 2 965 888 / +94 77 5 072 909', pageWidth / 2, y, { align: 'center' });
+          y += 8;
+          doc.setDrawColor(180, 180, 180); doc.line(margin, y, pageWidth - margin, y); y += 8;
+
+          // ── Title ─────────────────────────────────────────────────────────
+          doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+          doc.text('RESERVATION CONFIRMATION', pageWidth / 2, y, { align: 'center' });
+          y += 6;
+          doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+          doc.text(`Reservation No. ${pb.reservation_number || '—'}`, pageWidth / 2, y, { align: 'center' });
+          y += 10;
+
+          // ── Guest & booking fields in two columns ─────────────────────────
+          const fields: [string, string][] = [
+            ['Guest Name', pb.customer_name || '—'],
+            ['Contact Number', pb.contact_number || '—'],
+            ['Email', pb.email || '—'],
+            ['Room', pb.room_name || '—'],
+            ['Room Type', pb.room_type || '—'],
+            ['Rate Plan', pb.rate_plan_name || '—'],
+            ['No. of Rooms', String(pb.num_rooms ?? 1)],
+            ['Check-In', pb.checkin_date || '—'],
+            ['Check-Out', pb.checkout_date || '—'],
+            ['Nights', String(nights)],
+            ['Adults', String(pb.adults ?? '—')],
+            ['Children', String(pb.children ?? 0)],
+          ];
+          const col2X = pageWidth / 2 + 5;
+          let leftY = y; let rightY = y;
+          fields.forEach(([label, value], i) => {
+            const isLeft = i % 2 === 0;
+            const x = isLeft ? margin : col2X;
+            const cy = isLeft ? leftY : rightY;
+            doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
+            doc.setTextColor(120, 120, 120);
+            doc.text(label.toUpperCase(), x, cy);
+            doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+            doc.setTextColor(30, 30, 30);
+            doc.text(String(value), x, cy + 5);
+            if (isLeft) leftY += 14; else rightY += 14;
+          });
+          y = Math.max(leftY, rightY) + 5;
+
+          // ── Payment summary ───────────────────────────────────────────────
+          doc.setDrawColor(180, 180, 180); doc.line(margin, y, pageWidth - margin, y); y += 8;
+          doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+          doc.text('PAYMENT SUMMARY', margin, y); y += 7;
+          const payRows: [string, string][] = [];
+          if (Number(pb.room_amount) > 0)
+            payRows.push(['Room Amount', `LKR ${Number(pb.room_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`]);
+          if (Number(pb.rate_plan_amount) > 0)
+            payRows.push(['Rate Plan Amount', `LKR ${Number(pb.rate_plan_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`]);
+          payRows.push(['Total Amount', `LKR ${Number(pb.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`]);
+          payRows.push(['Payment Type', pb.payment_type || '—']);
+          payRows.push(['Payment Status', pb.payment_status || '—']);
+          payRows.forEach(([label, value]) => {
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+            doc.text(label, margin, y);
+            doc.text(value, pageWidth - margin, y, { align: 'right' });
+            y += 7;
+          });
+
+          // ── Notes ─────────────────────────────────────────────────────────
+          if (pb.notes) {
+            doc.setDrawColor(180, 180, 180); doc.line(margin, y + 3, pageWidth - margin, y + 3); y += 10;
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text('NOTES', margin, y); y += 6;
+            doc.setFont('helvetica', 'normal');
+            const noteLines = doc.splitTextToSize(String(pb.notes), pageWidth - margin * 2);
+            doc.text(noteLines, margin, y); y += noteLines.length * 5 + 5;
+          }
+
+          // ── Footer ────────────────────────────────────────────────────────
+          const footerY = pageHeight - 15;
+          doc.setDrawColor(180, 180, 180); doc.line(margin, footerY, pageWidth - margin, footerY);
+          doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150);
+          doc.text('Thank you for choosing The Tranquil Hotel & Restaurant. We look forward to welcoming you.', pageWidth / 2, footerY + 6, { align: 'center' });
+
+          doc.save(`Reservation-${pb.reservation_number || 'download'}.pdf`);
+        };
+        return (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:bg-transparent print:p-0 print:block">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh] print:shadow-none print:rounded-none print:max-h-none print:w-full">
+              {/* Screen-only header bar */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 print:hidden">
+                <h2 className="text-base font-bold text-slate-800">Reservation Confirmation</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={downloadPdf}
+                    className="flex items-center gap-2 px-5 py-2 bg-cyan-600 text-white rounded-xl text-sm font-semibold hover:bg-cyan-700 transition-colors"
+                  >
+                    <Printer size={15} /> Download PDF
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-2 px-5 py-2 bg-slate-800 text-white rounded-xl text-sm font-semibold hover:bg-black transition-colors"
+                  >
+                    <Printer size={15} /> Print
+                  </button>
+                  <button onClick={() => setPrintingBooking(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100">
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Printable content */}
+              <div id="reservation-print" className="overflow-y-auto p-8 print:p-6 print:overflow-visible" style={{ fontFamily: 'Arial, sans-serif' }}>
+                {/* Hotel header */}
+                <div className="text-center mb-6 pb-5 border-b-2 border-slate-200 print:mb-4 print:pb-4">
+                  <p className="text-lg font-bold text-slate-800">The Tranquil Hotel &amp; Restaurant</p>
+                  <p className="text-xs text-slate-500 mt-0.5">No.194 / 1, Makola South, Makola, Sri Lanka</p>
+                  <p className="text-xs text-slate-500">+94 11 2 965 888 / +94 77 5 072 909</p>
+                </div>
+
+                {/* Title */}
+                <div className="text-center mb-6">
+                  <h1 className="text-xl font-bold text-slate-900 uppercase tracking-widest">Reservation Confirmation</h1>
+                  <p className="text-sm text-slate-500 mt-1">Reservation No. <span className="font-bold text-slate-800">{pb.reservation_number || '—'}</span></p>
+                </div>
+
+                {/* Guest & Booking Details */}
+                <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-6">
+                  {[
+                    ['Guest Name', pb.customer_name],
+                    ['Contact Number', pb.contact_number || '—'],
+                    ['Email', pb.email || '—'],
+                    ['Room', pb.room_name || '—'],
+                    ['Room Type', pb.room_type || '—'],
+                    ['Rate Plan', pb.rate_plan_name || '—'],
+                    ['No. of Rooms', pb.num_rooms ?? 1],
+                    ['Check-In', pb.checkin_date || '—'],
+                    ['Check-Out', pb.checkout_date || '—'],
+                    ['Nights', nights],
+                    ['Adults', pb.adults ?? '—'],
+                    ['Children', pb.children ?? 0],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+                      <span className="text-xs font-bold text-slate-800 text-right capitalize">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Payment */}
+                <div className="bg-slate-50 rounded-xl p-4 mb-6 print:bg-white print:border print:border-slate-200">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Payment Summary</p>
+                  <div className="space-y-2">
+                    {Number(pb.room_amount) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Room Amount</span>
+                        <span className="font-semibold text-slate-800">LKR {Number(pb.room_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {Number(pb.rate_plan_amount) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Rate Plan Amount</span>
+                        <span className="font-semibold text-slate-800">LKR {Number(pb.rate_plan_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm border-t border-slate-200 pt-2 mt-2">
+                      <span className="font-bold text-slate-700">Total Amount</span>
+                      <span className="font-bold text-cyan-700 text-base">LKR {Number(pb.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Payment Type</span>
+                      <span className="font-semibold text-slate-800">{pb.payment_type || '—'}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Payment Status</span>
+                      <span className={`font-bold ${pb.payment_status === 'Paid' ? 'text-emerald-600' : pb.payment_status === 'Partial' ? 'text-amber-600' : 'text-slate-500'}`}>{pb.payment_status || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                {pb.notes && (
+                  <div className="mb-6">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Notes</p>
+                    <p className="text-sm text-slate-700">{pb.notes}</p>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="border-t border-slate-200 pt-4 text-center">
+                  <p className="text-xs text-slate-400">Thank you for choosing The Tranquil Hotel &amp; Restaurant. We look forward to welcoming you.</p>
+                </div>
+              </div>
+            </div>
           </div>
-        </Modal>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -10,6 +10,10 @@ import POS from './pages/POS';
 import Dashboard from './pages/Dashboard';
 import Events from './pages/Events';
 import RoomService from './pages/RoomService';
+import Expenses from './pages/Expenses';
+import Reports from './pages/Reports';
+import EventsDashboard from './pages/EventsDashboard';
+import ExpensesDashboard from './pages/ExpensesDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useStore } from './store';
 
@@ -53,6 +57,38 @@ export default function App() {
           element={
             <ProtectedRoute>
               <RoomService />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/expenses"
+          element={
+            <ProtectedRoute>
+              <Expenses />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <Reports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/events-dashboard"
+          element={
+            <ProtectedRoute>
+              <EventsDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/expenses-dashboard"
+          element={
+            <ProtectedRoute>
+              <ExpensesDashboard />
             </ProtectedRoute>
           }
         />
