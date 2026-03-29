@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Search, ShoppingBag, Plus, Minus, Trash2, CreditCard, Banknote, BedDouble, Receipt, TrendingUp, Menu, Sun, Moon, Play, Settings, ListOrdered, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart, Pizza, UtensilsCrossed, Package, Home, Truck, X, Landmark, FileCheck, FileText, Calendar } from 'lucide-react';
+import { LogOut, Search, ShoppingBag, Plus, Minus, Trash2, CreditCard, Banknote, BedDouble, Receipt, TrendingUp, Menu, Sun, Moon, Play, Settings, ListOrdered, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart, Pizza, UtensilsCrossed, Package, Home, Truck, X, Landmark, FileCheck } from 'lucide-react';
 import OrdersManagementModal from '../components/OrdersManagementModal';
 import ReceiptModal from '../components/ReceiptModal';
 import AddItemModal from '../components/AddItemModal';
 import CategoriesModal from '../components/CategoriesModal';
 import ManageItemsModal from '../components/ManageItemsModal';
 import AttachItemModal from '../components/AttachItemModal';
+import AppSidebar from '../components/AppSidebar';
 
 const PizzaPlaceholder = () => (
   <svg viewBox="0 0 100 100" className="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -48,6 +49,7 @@ export default function POS() {
   const [paidAmount, setPaidAmount] = useState('');
 
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [showKOTBillsModal, setShowKOTBillsModal] = useState(false);
   const [selectedKOTOrder, setSelectedKOTOrder] = useState<any | null>(null);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -225,10 +227,19 @@ export default function POS() {
 
   return (
     <>
-      <div className={`flex flex-col h-screen font-sans overflow-hidden print:hidden ${isDarkMode ? 'bg-slate-900' : 'bg-white'}`}>
+      <div className={`flex h-screen font-sans overflow-hidden print:hidden ${isDarkMode ? 'bg-slate-900' : 'bg-white'}`}>
+        <AppSidebar show={showSidebar} onClose={() => setShowSidebar(false)} />
+
+        <div className="flex flex-col flex-1 overflow-hidden">
         {/* Top Nav */}
       <header className={`h-14 flex items-center justify-between px-4 shrink-0 ${isDarkMode ? 'bg-slate-800 border-b border-slate-700' : 'bg-white border-b border-slate-200'}`}>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowSidebar(true)}
+            className={`md:hidden p-1 rounded-lg ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'}`}
+          >
+            <Menu size={22} />
+          </button>
           <div className="flex flex-col">
             <h1 className={`text-[15px] font-bold leading-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Point of Sale</h1>
             <span className="text-[9px] bg-cyan-400 text-white px-1.5 py-0.5 rounded uppercase font-bold tracking-wider w-fit mt-0.5">The Tranquil</span>
@@ -253,12 +264,6 @@ export default function POS() {
             >
               {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
             </button>
-            {user?.role !== 'cashier' && (
-              <>
-                <button onClick={() => navigate('/dashboard')} className="hover:text-indigo-600 ml-2" title="Dashboard & Analytics"><TrendingUp size={24} /></button>
-                <button onClick={() => navigate('/events')} className="hover:text-violet-600 ml-2" title="Event Management"><Calendar size={24} /></button>
-              </>
-            )}
             <button onClick={handleLogout} className="hover:text-red-600 ml-2"><LogOut size={24} /></button>
           </div>
         </div>
@@ -394,12 +399,6 @@ export default function POS() {
                   <div className="flex justify-between items-start mb-2">
                     <h4 className={`font-bold text-[13px] pr-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{item.name}</h4>
                     <div className="flex items-center gap-3 shrink-0">
-                      <button 
-                        onClick={() => handleEditNote(item.id, item.note || '')}
-                        className={`${editingNoteId === item.id ? 'text-blue-500' : ''} ${isDarkMode ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}
-                      >
-                        <FileText size={14} />
-                      </button>
                       <div className="flex items-center gap-2">
                         <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className={isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-black'}><Minus size={14} /></button>
                         <span className="font-bold text-[13px] w-4 text-center">{item.quantity}</span>
@@ -410,34 +409,7 @@ export default function POS() {
                   </div>
                   <p className={`text-[13px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{item.price.toFixed(2)} &times; {item.quantity}</p>
                   
-                  {editingNoteId === item.id ? (
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        type="text"
-                        value={noteText}
-                        onChange={(e) => setNoteText(e.target.value)}
-                        placeholder="Add note (e.g., No onions)"
-                        className={`flex-1 px-2 py-1 text-xs rounded border ${isDarkMode ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-white border-slate-300'}`}
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleSaveNote(item.id)}
-                        className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={handleCancelNote}
-                        className={`px-2 py-1 text-xs rounded ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300'}`}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : item.note ? (
-                    <p className={`text-xs italic mt-2 pl-2 border-l-2 border-blue-400 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {item.note}
-                    </p>
-                  ) : null}
+
                 </div>
               ))
             )}
@@ -490,6 +462,7 @@ export default function POS() {
         </div>
         )}
       </div>
+        </div>{/* end flex-col flex-1 inner wrapper */}
     </div>
 
       {/* Delivery Method Modal */}

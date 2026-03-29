@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, TrendingUp, CalendarDays, BedDouble, Receipt,
   LogOut, X, List, Tag, FileText, LayoutDashboard, BookOpen,
-  ClipboardList, Calendar, PlaneLanding,
+  ClipboardList, Calendar, PlaneLanding, BarChart2, ListOrdered,
 } from 'lucide-react';
 import { useStore } from '../store';
 
@@ -95,6 +95,14 @@ export default function AppSidebar({
               >
                 <TrendingUp size={16} className="shrink-0" />
                 <span>Dashboard</span>
+              </Link>
+              <Link
+                to="/reports"
+                onClick={onClose}
+                className={linkCls(path === '/reports', 'cyan')}
+              >
+                <BarChart2 size={16} className="shrink-0" />
+                <span>Reports</span>
               </Link>
             </div>
           </div>
