@@ -125,6 +125,63 @@ export default function Reports() {
     custom: 'Custom Range',
   };
 
+  const printReport = () => {
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const hh = now.getHours(); const ampm = hh >= 12 ? 'PM' : 'AM'; const h12 = hh % 12 || 12;
+    const genTime = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(h12)}.${pad(now.getMinutes())} ${ampm}`;
+
+    const catRows = categorySummary.map((cat, i) => {
+      const pct = totalAmount > 0 ? (cat.total / totalAmount) * 100 : 0;
+      return `<tr><td style="text-align:center">${i+1}</td><td>${cat.name}</td><td style="text-align:right">${cat.count}</td><td style="text-align:right">LKR ${cat.total.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td style="text-align:right">${pct.toFixed(1)}%</td></tr>`;
+    }).join('');
+
+    const expRows = expenses.map((e, i) =>
+      `<tr><td style="text-align:center">${i+1}</td><td>${e.expense_date}</td><td>${e.category_name||'—'}</td><td>${e.expense_for}</td><td>${e.reference_no||'—'}</td><td style="text-align:right">LKR ${Number(e.amount).toLocaleString(undefined,{minimumFractionDigits:2})}</td><td>${e.created_by||'—'}</td></tr>`
+    ).join('');
+
+    win.document.write(`<!DOCTYPE html><html><head><title>Expense Report</title><style>
+      body{font-family:Arial,sans-serif;max-width:960px;margin:0 auto;padding:32px;color:#1e293b;}
+      .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:24px;}
+      .biz-name{font-size:22px;font-weight:700;color:#0f172a;}
+      .biz-info{font-size:12px;color:#475569;margin-top:3px;}
+      .report-title{font-size:17px;font-weight:700;color:#0891b2;margin-top:10px;}
+      .meta{font-size:11px;color:#64748b;margin-top:4px;}
+      h3{font-size:12px;font-weight:700;color:#1e293b;margin:20px 0 6px;text-transform:uppercase;letter-spacing:0.05em;}
+      table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+      th{background:#0891b2;color:white;padding:9px 11px;text-align:left;font-size:11px;}
+      td{padding:8px 11px;border-bottom:1px solid #f1f5f9;font-size:12px;}
+      tr:hover td{background:#f8fafc;}
+      tfoot td{background:#f1f5f9;font-weight:700;border-top:2px solid #0891b2;}
+      .footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;}
+      @media print{body{padding:16px;}}
+    </style></head><body>
+    <div class="header">
+      <div class="biz-name">The Tranquil</div>
+      <div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div>
+      <div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div>
+      <div class="report-title">Expense Report</div>
+      <div class="meta">Report Duration: ${startDate} &mdash; ${endDate}</div>
+      <div class="meta">Generated: ${genTime}</div>
+    </div>
+    <h3>By Category</h3>
+    <table><thead><tr><th style="width:36px;text-align:center">#</th><th>Category</th><th style="text-align:right">Transactions</th><th style="text-align:right">Total Amount</th><th style="text-align:right">% of Total</th></tr></thead>
+    <tbody>${catRows}</tbody>
+    <tfoot><tr><td></td><td><strong>Total</strong></td><td style="text-align:right">${expenses.length}</td><td style="text-align:right">LKR ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td></td></tr></tfoot>
+    </table>
+    <h3>All Transactions</h3>
+    <table><thead><tr><th style="width:36px;text-align:center">#</th><th>Date</th><th>Category</th><th>Expense For</th><th>Reference No.</th><th style="text-align:right">Amount</th><th>Created By</th></tr></thead>
+    <tbody>${expRows}</tbody>
+    <tfoot><tr><td colspan="5"><strong>Total</strong></td><td style="text-align:right">LKR ${totalAmount.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td></td></tr></tfoot>
+    </table>
+    <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0891b2;text-decoration:underline;">https://clickinmo.com</a></div>
+    </body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 400);
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
       {showSidebar && (
@@ -219,6 +276,13 @@ export default function Reports() {
                 {startDate} → {endDate}
               </span>
             )}
+            <button
+              onClick={printReport}
+              disabled={expenses.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              <Receipt size={15} /> Print Report
+            </button>
           </div>
 
           {loading ? (

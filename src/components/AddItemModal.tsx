@@ -22,7 +22,7 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
   const [price, setPrice] = useState('0');
   const [categoryId, setCategoryId] = useState('');
   const [posCenter, setPosCenter] = useState(true);
-  const [kot, setKot] = useState(false);
+  const [kotType, setKotType] = useState<'KOT' | 'BOT'>('KOT');
 
   // Inline new-category creation
   const [showNewCat, setShowNewCat] = useState(false);
@@ -66,7 +66,7 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
         price: Number(price),
         category_id: categoryId,
         image: '',
-        kot,
+        kot_type: kotType,
       });
       onSaved();
       onClose();
@@ -187,17 +187,17 @@ export default function AddItemModal({ onClose, onSaved }: Props) {
                 )}
               </div>
 
-              {/* KOT */}
+              {/* KOT / BOT */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">KOT (Kitchen Order Ticket)</label>
-                <div className="flex gap-6">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Ticket Type</label>
+                <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="kot" checked={kot} onChange={() => setKot(true)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
-                    <span className="text-sm text-slate-700">Yes</span>
+                    <input type="radio" name="kotType" checked={kotType === 'KOT'} onChange={() => setKotType('KOT')} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
+                    <span className="text-sm font-medium text-cyan-700">KOT</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="kot" checked={!kot} onChange={() => setKot(false)} className="w-4 h-4 text-cyan-600 focus:ring-cyan-500" />
-                    <span className="text-sm text-slate-700">No</span>
+                    <input type="radio" name="kotType" checked={kotType === 'BOT'} onChange={() => setKotType('BOT')} className="w-4 h-4 text-amber-600 focus:ring-amber-500" />
+                    <span className="text-sm font-medium text-amber-700">BOT</span>
                   </label>
                 </div>
               </div>

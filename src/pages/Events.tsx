@@ -5,7 +5,7 @@ import {
   LogOut, Plus, Trash2, Edit2, X, Calendar, Clock, Users, Phone, User,
   CheckCircle, AlertTriangle, Printer, ChevronDown, Menu as MenuIcon,
   CalendarDays, FileText, DollarSign, CreditCard, Banknote, Check, Ban,
-  ShoppingCart, Search, UtensilsCrossed, BedDouble
+  ShoppingCart, BedDouble
 } from 'lucide-react';
 import AppSidebar from '../components/AppSidebar';
 
@@ -21,7 +21,8 @@ interface EventItem {
 interface EventFunction {
   id: string;
   name: string;
-  type?: 'function' | 'menu';
+  type: 'place' | 'menu';
+  price?: number;
   items: EventItem[];
   created_at: string;
   updated_at: string;
@@ -34,10 +35,16 @@ interface EventBooking {
   event_date: string;
   event_time: string;
   pax: number;
+  event_name?: string;
+  event_place_id?: string;
+  event_place_name?: string;
+  event_place_price?: number;
+  menu_price_per_person?: number;
   function_id: string;
   function_name: string;
   items: EventItem[];
   subtotal: number;
+  service_charge?: number;
   total: number;
   advance_payment: number;
   balance: number;
@@ -55,10 +62,16 @@ function printBookingPDF(booking: EventBooking) {
   const win = window.open('', '_blank', 'width=800,height=700');
   if (!win) return;
 
+  const _now = new Date();
+  const _pad = (n: number) => String(n).padStart(2, '0');
+  const _hh = _now.getHours(); const _ampm = _hh >= 12 ? 'PM' : 'AM'; const _h12 = _hh % 12 || 12;
+  const genTime = `${_pad(_now.getDate())}/${_pad(_now.getMonth()+1)}/${_now.getFullYear()} ${_pad(_h12)}.${_pad(_now.getMinutes())} ${_ampm}`;
+
   const itemRows = booking.items
     .map(
-      (it) =>
+      (it, idx) =>
         `<tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${idx+1}</td>
           <td style="padding:6px 8px;border-bottom:1px solid #eee;">${it.name}</td>
           <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${it.quantity}</td>
           <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${it.price.toFixed(2)}</td>
@@ -82,9 +95,11 @@ function printBookingPDF(booking: EventBooking) {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; font-size: 13px; color: #1e293b; padding: 32px; }
-    .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #0f172a; padding-bottom: 16px; }
-    .header h1 { font-size: 22px; font-weight: 700; color: #0f172a; }
-    .header p { color: #64748b; font-size: 12px; margin-top: 4px; }
+    .header { text-align: center; margin-bottom: 24px; border-bottom: 3px solid #0891b2; padding-bottom: 16px; }
+    .biz-name { font-size: 22px; font-weight: 700; color: #0f172a; }
+    .biz-info { font-size: 11px; color: #475569; margin-top: 3px; }
+    .report-title { font-size: 16px; font-weight: 700; color: #0891b2; margin-top: 10px; }
+    .sub { font-size: 11px; color: #64748b; margin-top: 4px; }
     .section { margin-bottom: 18px; }
     .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -104,8 +119,11 @@ function printBookingPDF(booking: EventBooking) {
 </head>
 <body>
   <div class="header">
-    <h1>HotelMate POS</h1>
-    <p>Event Booking Confirmation</p>
+    <div class="biz-name">The Tranquil</div>
+    <div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div>
+    <div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div>
+    <div class="report-title">Event Booking Confirmation</div>
+    <div class="sub">Generated: ${genTime}</div>
   </div>
 
   <div class="section">
@@ -119,7 +137,9 @@ function printBookingPDF(booking: EventBooking) {
   <div class="section">
     <div class="section-title">Event Details</div>
     <div class="grid2">
-      <div class="field"><label>Function</label><span>${booking.function_name || '—'}</span></div>
+      ${booking.event_name ? `<div class="field"><label>Event Name</label><span>${booking.event_name}</span></div>` : ''}
+      ${booking.event_place_name ? `<div class="field"><label>Event Place</label><span>${booking.event_place_name}</span></div>` : ''}
+      ${booking.function_name ? `<div class="field"><label>Function Menu</label><span>${booking.function_name}</span></div>` : ''}
       <div class="field"><label>PAX (Guests)</label><span>${booking.pax}</span></div>
       <div class="field"><label>Event Date</label><span>${booking.event_date}</span></div>
       <div class="field"><label>Event Time</label><span>${booking.event_time}</span></div>
@@ -129,20 +149,24 @@ function printBookingPDF(booking: EventBooking) {
 
   <div class="section">
     <div class="section-title">Items</div>
+    ${booking.items.length > 0 ? `
     <table>
       <thead>
         <tr>
+          <th style="text-align:center;width:36px;">#</th>
           <th>Item</th>
-          <th>Qty</th>
-          <th>Unit Price</th>
-          <th>Amount</th>
+          <th style="text-align:center;">Qty</th>
+          <th style="text-align:right;">Unit Price</th>
+          <th style="text-align:right;">Amount</th>
         </tr>
       </thead>
       <tbody>${itemRows}</tbody>
-    </table>
+    </table>` : ''}
     <div class="totals">
-      <div class="total-row"><span>Subtotal</span><span>${booking.subtotal.toFixed(2)}</span></div>
-      <div class="total-row grand"><span>Total</span><span>${booking.total.toFixed(2)}</span></div>
+      ${(booking.event_place_price ?? 0) > 0 ? `<div class="total-row"><span>Event Place</span><span>LKR ${(booking.event_place_price ?? 0).toFixed(2)}</span></div>` : ''}
+      ${booking.items.length > 0 ? `<div class="total-row"><span>Menu Subtotal</span><span>LKR ${(booking.subtotal - (booking.event_place_price ?? 0)).toFixed(2)}</span></div>` : ''}
+      ${(booking.service_charge ?? 0) > 0 ? `<div class="total-row"><span>Service Charge (10%)</span><span>LKR ${(booking.service_charge ?? 0).toFixed(2)}</span></div>` : ''}
+      <div class="total-row grand"><span>Total</span><span>LKR ${booking.total.toFixed(2)}</span></div>
       <div class="total-row" style="color:#0f172a;margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;">
         <span>Payment Status</span><span>${paymentBadge}</span>
       </div>
@@ -154,7 +178,7 @@ function printBookingPDF(booking: EventBooking) {
     </div>
   </div>
 
-  <div class="footer">Thank you for choosing HotelMate. We look forward to making your event special!</div>
+  <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0891b2;text-decoration:underline;">https://clickinmo.com</a></div>
 </body>
 </html>`);
   win.document.close();
@@ -220,7 +244,29 @@ export default function Events() {
         apiFetch('/api/events/bookings'),
       ]);
       if (fnRes.ok) setFunctions(await fnRes.json());
-      if (bkRes.ok) setBookings(await bkRes.json());
+      if (bkRes.ok) {
+        const fetchedBookings: EventBooking[] = await bkRes.json();
+        // Auto-complete bookings where event date has already passed
+        const today = new Date().toISOString().split('T')[0];
+        const toComplete = fetchedBookings.filter(
+          (b) => b.status === 'upcoming' && b.event_date < today
+        );
+        if (toComplete.length > 0) {
+          await Promise.all(
+            toComplete.map((b) =>
+              apiFetch(`/api/events/bookings/${b.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'completed' }),
+              })
+            )
+          );
+          const refreshed = await apiFetch('/api/events/bookings');
+          if (refreshed.ok) setBookings(await refreshed.json());
+        } else {
+          setBookings(fetchedBookings);
+        }
+      }
     } catch (e) {
       console.error('Events fetch error:', e);
     } finally {
@@ -377,9 +423,9 @@ export default function Events() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setEditingFunction(null); setShowFunctionForm(true); }}
-                  className="flex items-center gap-2 bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition-colors"
+                  className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow transition-colors"
                 >
-                  <Plus className="w-4 h-4" /> Add New Function
+                  <Plus className="w-4 h-4" /> Add Event Place
                 </button>
                 <button
                   onClick={() => { setEditingFunction(null); setShowFunctionMenuForm(true); }}
@@ -431,8 +477,6 @@ export default function Events() {
         <BookingFormModal
           booking={editingBooking}
           functions={functions}
-          categories={categories}
-          products={products}
           apiFetch={apiFetch}
           onClose={() => setShowBookingForm(false)}
           onSaved={(saved) => {
@@ -451,7 +495,7 @@ export default function Events() {
       {showFunctionForm && (
         <FunctionFormModal
           fn={editingFunction}
-          fnType="function"
+          fnType="place"
           apiFetch={apiFetch}
           onClose={() => setShowFunctionForm(false)}
           onSaved={() => { fetchAll(); setShowFunctionForm(false); }}
@@ -602,7 +646,9 @@ function BookingViewModal({
             <div><p className="text-xs text-slate-400 uppercase tracking-wide">Event Date</p><p className="font-semibold text-slate-800 mt-0.5">{formatDate(booking.event_date)}</p></div>
             <div><p className="text-xs text-slate-400 uppercase tracking-wide">Event Time</p><p className="font-semibold text-slate-800 mt-0.5">{booking.event_time}</p></div>
             <div><p className="text-xs text-slate-400 uppercase tracking-wide">PAX</p><p className="font-semibold text-slate-800 mt-0.5">{booking.pax} persons</p></div>
-            <div><p className="text-xs text-slate-400 uppercase tracking-wide">Function</p><p className="font-semibold text-slate-800 mt-0.5">{booking.function_name || '—'}</p></div>
+            {booking.event_name && <div className="col-span-2"><p className="text-xs text-slate-400 uppercase tracking-wide">Event Name</p><p className="font-semibold text-slate-800 mt-0.5">{booking.event_name}</p></div>}
+            {booking.event_place_name && <div><p className="text-xs text-slate-400 uppercase tracking-wide">Event Place</p><p className="font-semibold text-slate-800 mt-0.5">{booking.event_place_name}</p></div>}
+            {booking.function_name && <div><p className="text-xs text-slate-400 uppercase tracking-wide">Function Menu</p><p className="font-semibold text-slate-800 mt-0.5">{booking.function_name}</p></div>}
             <div><p className="text-xs text-slate-400 uppercase tracking-wide">Status</p>
               <p className="mt-0.5"><span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColor(booking.status)}`}>{booking.status}</span></p>
             </div>
@@ -625,7 +671,28 @@ function BookingViewModal({
           </div>
 
           <div className="bg-slate-50 rounded-xl p-4 space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-slate-500">Subtotal</span><span className="font-medium">LKR {booking.total.toFixed(2)}</span></div>
+            {(booking.event_place_price ?? 0) > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Event Place</span>
+                <span className="font-medium">LKR {(booking.event_place_price ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+            {booking.subtotal > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Menu Subtotal</span>
+                <span className="font-medium">LKR {(booking.subtotal - (booking.event_place_price ?? 0)).toFixed(2)}</span>
+              </div>
+            )}
+            {(booking.service_charge ?? 0) > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Service Charge (10%)</span>
+                <span className="font-medium">LKR {(booking.service_charge ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm font-bold border-t pt-2 border-slate-200">
+              <span className="text-slate-700">Total</span>
+              <span className="text-slate-800">LKR {booking.total.toFixed(2)}</span>
+            </div>
             <div className="flex justify-between text-sm"><span className="text-slate-500">Advance Paid</span><span className="font-medium text-emerald-600">LKR {(booking.advance_payment || 0).toFixed(2)}</span></div>
             <div className="flex justify-between text-sm font-bold border-t pt-2 border-slate-200">
               <span className="text-violet-700">Balance Due</span><span className="text-violet-700">LKR {(booking.balance || 0).toFixed(2)}</span>
@@ -736,7 +803,7 @@ function BookingsTab({
                 <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-violet-400" /> {formatDate(b.event_date)}</div>
                 <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-violet-400" /> {b.event_time}</div>
                 <div className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-violet-400" /> {b.pax} Pax</div>
-                {b.function_name && <div className="flex items-center gap-1.5 col-span-1 truncate"><CalendarDays className="w-3.5 h-3.5 text-violet-400 shrink-0" /> <span className="truncate">{b.function_name}</span></div>}
+                {(b.event_name || b.event_place_name) && <div className="flex items-center gap-1.5 col-span-2 truncate"><CalendarDays className="w-3.5 h-3.5 text-violet-400 shrink-0" /> <span className="truncate">{b.event_name || b.event_place_name}</span></div>}
               </div>
 
               {/* Financials */}
@@ -810,8 +877,8 @@ function FunctionsTab({
               <div className="flex items-center justify-between p-4 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-slate-800">{fn.name}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${fn.type === 'menu' ? 'bg-indigo-100 text-indigo-700' : 'bg-violet-100 text-violet-700'}`}>
-                    {fn.type === 'menu' ? 'Function Menu' : 'Function'}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${fn.type === 'menu' ? 'bg-indigo-100 text-indigo-700' : 'bg-teal-100 text-teal-700'}`}>
+                    {fn.type === 'menu' ? 'Function Menu' : 'Event Place'}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -824,25 +891,21 @@ function FunctionsTab({
                 </div>
               </div>
               <div className="px-4 pb-4">
-                {fn.items.length === 0 ? (
+                {fn.type === 'place' ? (
+                  <p className="text-xs text-slate-600 font-semibold">Price: LKR {fn.price?.toFixed(2) ?? '0.00'}</p>
+                ) : fn.items.length === 0 ? (
                   <p className="text-xs text-slate-400">No items added.</p>
                 ) : (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-slate-400">
-                        <th className="text-left font-semibold pb-1">Item</th>
-                        <th className="text-right font-semibold pb-1">Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <div>
+                    <p className="text-xs font-semibold text-indigo-700 mb-2">
+                      Price/person: LKR {fn.price?.toFixed(2) ?? '0.00'}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
                       {fn.items.map((it) => (
-                        <tr key={it.id} className="border-t border-slate-50">
-                          <td className="py-1 text-slate-700">{it.name}</td>
-                          <td className="py-1 text-right text-slate-700">{it.price.toFixed(2)}</td>
-                        </tr>
+                        <span key={it.id} className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">{it.name}</span>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -856,12 +919,10 @@ function FunctionsTab({
 // ─── Booking Form Modal ───────────────────────────────────────────────────────
 
 function BookingFormModal({
-  booking, functions, categories, products, apiFetch, onClose, onSaved,
+  booking, functions, apiFetch, onClose, onSaved,
 }: {
   booking: EventBooking | null;
   functions: EventFunction[];
-  categories: Category[];
-  products: Product[];
   apiFetch: (url: string, opts?: RequestInit) => Promise<Response>;
   onClose: () => void;
   onSaved: (saved: EventBooking) => void;
@@ -873,7 +934,15 @@ function BookingFormModal({
   const [eventDate, setEventDate] = useState(booking?.event_date || '');
   const [eventTime, setEventTime] = useState(booking?.event_time || '');
   const [pax, setPax] = useState(String(booking?.pax || 1));
-  const [selectedFnId, setSelectedFnId] = useState(booking?.function_id || '');
+  const [eventName, setEventName] = useState(booking?.event_name || '');
+  const [selectedPlaceId, setSelectedPlaceId] = useState(booking?.event_place_id || '');
+  const [selectedPlaceName, setSelectedPlaceName] = useState(booking?.event_place_name || '');
+  const [selectedPlacePrice, setSelectedPlacePrice] = useState(booking?.event_place_price ?? 0);
+  const [selectedMenuId, setSelectedMenuId] = useState(booking?.function_id || '');
+  const [selectedMenuName, setSelectedMenuName] = useState(booking?.function_name || '');
+  const [menuPrice, setMenuPrice] = useState<number>(
+    booking?.menu_price_per_person ?? functions.find((f) => f.id === booking?.function_id)?.price ?? 0
+  );
   const [items, setItems] = useState<EventItem[]>(booking?.items || []);
   const [paymentType, setPaymentType] = useState<'full' | 'advance'>(
     booking ? (booking.payment_status === 'full' ? 'full' : 'advance') : 'full'
@@ -885,24 +954,37 @@ function BookingFormModal({
   const [conflictDetails, setConflictDetails] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [showMenuPicker, setShowMenuPicker] = useState(false);
-  const [selectedFnName, setSelectedFnName] = useState(booking?.function_name || '');
 
-  const subtotal = items.reduce((s, it) => s + it.price * it.quantity, 0);
-  const total = subtotal;
+  const paxNum = parseInt(pax) || 1;
+  const menuSubtotal = selectedMenuId ? (menuPrice * paxNum) : 0;
+  const menuServiceCharge = menuSubtotal * 0.1;
+  const subtotal = selectedPlacePrice + menuSubtotal;
+  const serviceCharge = menuServiceCharge;
+  const total = subtotal + serviceCharge;
   const advance = paymentType === 'full' ? total : parseFloat(advanceAmount) || 0;
   const balance = Math.max(0, total - advance);
 
-  // Load function items when product is selected as function
-  const handleFunctionChange = (productId: string) => {
-    setSelectedFnId(productId);
-    if (!productId) { setSelectedFnName(''); setItems([]); return; }
-    const prod = products.find((p) => p.id === productId);
-    if (prod) {
-      setSelectedFnName(prod.name);
-      setItems([{ id: prod.id, name: prod.name, price: prod.price, quantity: 1 }]);
+  // Handle event place selection
+  const handlePlaceChange = (id: string) => {
+    setSelectedPlaceId(id);
+    const place = functions.find((f) => f.id === id);
+    setSelectedPlaceName(place?.name || '');
+    setSelectedPlacePrice(place?.price ?? 0);
+  };
+
+  // Handle function menu selection — store price and item names
+  const handleMenuChange = (id: string) => {
+    setSelectedMenuId(id);
+    if (!id) { setSelectedMenuName(''); setMenuPrice(0); setItems([]); return; }
+    const menu = functions.find((f) => f.id === id);
+    if (menu) {
+      setSelectedMenuName(menu.name);
+      setMenuPrice(menu.price ?? 0);
+      setItems(menu.items);
     }
   };
+
+  // When pax changes nothing extra needed — paxNum is derived from `pax` state directly
 
   // Check date/time conflict
   useEffect(() => {
@@ -922,29 +1004,6 @@ function BookingFormModal({
     return () => clearTimeout(timeout);
   }, [eventDate, eventTime]);
 
-  const handleItemQuantity = (id: string, qty: number) => {
-    setItems((prev) => prev.map((it) => it.id === id ? { ...it, quantity: Math.max(1, qty) } : it));
-  };
-
-  const handleRemoveItem = (id: string) => {
-    setItems((prev) => prev.filter((it) => it.id !== id));
-  };
-
-  const handleAddCustomItem = () => {
-    setItems((prev) => [
-      ...prev,
-      { id: `c-${Date.now()}`, name: 'New Item', price: 0, quantity: 1 },
-    ]);
-  };
-
-  const handleItemField = (id: string, field: 'name' | 'price', value: string) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === id ? { ...it, [field]: field === 'price' ? parseFloat(value) || 0 : value } : it
-      )
-    );
-  };
-
   const handleSave = async () => {
     if (!customerName.trim()) { setError('Customer name is required.'); return; }
     if (!eventDate) { setError('Event date is required.'); return; }
@@ -952,17 +1011,22 @@ function BookingFormModal({
     setSaving(true);
     setError('');
     try {
-      const selectedProd = products.find((p) => p.id === selectedFnId);
       const payload = {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         event_date: eventDate,
         event_time: eventTime,
         pax: parseInt(pax) || 1,
-        function_id: selectedFnId,
-        function_name: selectedFnName || selectedProd?.name || '',
+        event_name: eventName.trim(),
+        event_place_id: selectedPlaceId,
+        event_place_name: selectedPlaceName,
+        event_place_price: selectedPlacePrice,
+        function_id: selectedMenuId,
+        function_name: selectedMenuName,
+        menu_price_per_person: menuPrice,
         items,
         subtotal,
+        service_charge: serviceCharge,
         total,
         advance_payment: paymentType === 'full' ? total : advance,
         balance: paymentType === 'full' ? 0 : balance,
@@ -1081,103 +1145,88 @@ function BookingFormModal({
             </div>
           </div>
 
-          {/* Function select - populated from database products */}
+          {/* Event Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Event Function</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Event Name</label>
+            <input
+              type="text"
+              value={eventName}
+              onChange={(e) => setEventName(e.target.value)}
+              placeholder="e.g. Wedding Reception, Birthday Party..."
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+            />
+          </div>
+
+          {/* Event Place */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Event Place</label>
             <select
-              value={selectedFnId}
-              onChange={(e) => handleFunctionChange(e.target.value)}
+              value={selectedPlaceId}
+              onChange={(e) => handlePlaceChange(e.target.value)}
               className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
             >
-              <option value="">— Select a function —</option>
-              {products.filter(p => p.visible !== false).map((prod) => (
-                <option key={prod.id} value={prod.id}>
-                  {prod.name}{prod.code ? ` (code - ${prod.code})` : ''} — LKR {prod.price.toFixed(2)}
+              <option value="">— Select a place —</option>
+              {functions.filter((f) => f.type === 'place').map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}{f.price ? ` — LKR ${f.price.toFixed(2)}` : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Items */}
+          {/* Function Menu */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-slate-500">Items & Prices</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowMenuPicker(true)}
-                  className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-semibold border border-violet-200 bg-violet-50 hover:bg-violet-100 rounded-lg px-2.5 py-1 transition-colors"
-                >
-                  <UtensilsCrossed className="w-3.5 h-3.5" /> Browse Menu
-                </button>
-                <button
-                  onClick={handleAddCustomItem}
-                  className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-700 font-semibold"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Item
-                </button>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Function Menu</label>
+            <select
+              value={selectedMenuId}
+              onChange={(e) => handleMenuChange(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+            >
+              <option value="">— Select a menu —</option>
+              {functions.filter((f) => f.type === 'menu').map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Price Summary */}
+          {(selectedPlaceId || selectedMenuId) && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-sm">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Price Summary</p>
+              {selectedPlaceId && (
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Event Place — <span className="font-medium text-slate-700">{selectedPlaceName}</span></span>
+                  <span className="font-semibold text-slate-800">LKR {selectedPlacePrice.toFixed(2)}</span>
+                </div>
+              )}
+          {selectedMenuId && (
+            <>
+              <div className="flex justify-between">
+                <div>
+                  <span className="text-slate-600">Function Menu — <span className="font-medium text-slate-700">{selectedMenuName}</span></span>
+                  <div className="text-xs text-slate-500 mt-0.5">{menuPrice.toFixed(2)} × {paxNum} pax</div>
+                  {items.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {items.map((it) => (
+                        <span key={it.id} className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full">{it.name}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span className="font-semibold text-slate-800 shrink-0 ml-3">LKR {menuSubtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>Service Charge (10%)</span>
+                <span>LKR {menuServiceCharge.toFixed(2)}</span>
+              </div>
+            </>
+          )}
+              <div className="flex justify-between font-bold text-slate-800 pt-2 border-t border-slate-200 text-base">
+                <span>Total</span>
+                <span className="text-violet-700">LKR {total.toFixed(2)}</span>
               </div>
             </div>
-            {items.length === 0 ? (
-              <div className="text-xs text-slate-400 py-3 text-center border border-dashed border-slate-200 rounded-xl">
-                No items. Select a function, browse the menu, or add custom items.
-              </div>
-            ) : (
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="text-left p-2.5 text-slate-500 font-semibold">Item</th>
-                      <th className="p-2.5 text-slate-500 font-semibold text-center w-20">Qty</th>
-                      <th className="p-2.5 text-slate-500 font-semibold text-right w-24">Price</th>
-                      <th className="p-2.5 text-right text-slate-500 font-semibold w-24">Amount</th>
-                      <th className="w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((it) => (
-                      <tr key={it.id} className="border-t border-slate-100">
-                        <td className="p-2">
-                          <input
-                            value={it.name}
-                            onChange={(e) => handleItemField(it.id, 'name', e.target.value)}
-                            className="w-full border-0 bg-transparent focus:outline-none focus:bg-slate-50 rounded px-1 py-0.5"
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button onClick={() => handleItemQuantity(it.id, it.quantity - 1)} className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">−</button>
-                            <span className="w-6 text-center font-semibold">{it.quantity}</span>
-                            <button onClick={() => handleItemQuantity(it.id, it.quantity + 1)} className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">+</button>
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            value={it.price}
-                            onChange={(e) => handleItemField(it.id, 'price', e.target.value)}
-                            className="w-full border-0 bg-transparent focus:outline-none focus:bg-slate-50 rounded px-1 py-0.5 text-right"
-                          />
-                        </td>
-                        <td className="p-2 text-right font-semibold text-slate-700">{(it.price * it.quantity).toFixed(2)}</td>
-                        <td className="p-2">
-                          <button onClick={() => handleRemoveItem(it.id)} className="text-red-400 hover:text-red-600">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-                    <tr>
-                      <td colSpan={3} className="p-2.5 text-right font-bold text-slate-700">Total</td>
-                      <td className="p-2.5 text-right font-bold text-slate-800">{total.toFixed(2)}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Payment */}
           <div>
@@ -1261,23 +1310,6 @@ function BookingFormModal({
         </div>
       </div>
 
-      {/* Menu Picker */}
-      {showMenuPicker && (
-        <MenuPickerModal
-          categories={categories}
-          products={products}
-          onAdd={(product) => {
-            setItems((prev) => {
-              const existing = prev.find((it) => it.id === product.id);
-              if (existing) {
-                return prev.map((it) => it.id === product.id ? { ...it, quantity: it.quantity + 1 } : it);
-              }
-              return [...prev, { id: product.id, name: product.name, price: product.price, quantity: 1 }];
-            });
-          }}
-          onClose={() => setShowMenuPicker(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1288,14 +1320,16 @@ function FunctionFormModal({
   fn, fnType, apiFetch, onClose, onSaved,
 }: {
   fn: EventFunction | null;
-  fnType: 'function' | 'menu';
+  fnType: 'place' | 'menu';
   apiFetch: (url: string, opts?: RequestInit) => Promise<Response>;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const isEdit = !!fn;
   const isMenu = fnType === 'menu';
+  const isPlace = fnType === 'place';
   const [name, setName] = useState(fn?.name || '');
+  const [price, setPrice] = useState(String(fn?.price ?? ''));
   const [items, setItems] = useState<EventItem[]>(fn?.items || []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1319,7 +1353,9 @@ function FunctionFormModal({
     setSaving(true);
     setError('');
     try {
-      const payload = { name: name.trim(), items, type: fn?.type || fnType };
+      const payload = isPlace
+        ? { name: name.trim(), price: parseFloat(price) || 0, items: [], type: 'place' as const }
+        : { name: name.trim(), price: parseFloat(price) || 0, items: items.map((it) => ({ ...it, price: 0 })), type: 'menu' as const };
       if (isEdit) {
         await apiFetch(`/api/events/functions/${fn!.id}`, {
           method: 'PUT',
@@ -1343,56 +1379,78 @@ function FunctionFormModal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <h2 className="font-bold text-lg text-slate-800">
-            {isEdit ? (isMenu ? 'Edit Function Menu' : 'Edit Event Function') : (isMenu ? 'New Function Menu' : 'New Event Function')}
+            {isEdit ? (isPlace ? 'Edit Event Place' : 'Edit Function Menu') : (isPlace ? 'New Event Place' : 'New Function Menu')}
           </h2>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5 text-slate-500" /></button>
         </div>
 
         <div className="overflow-y-auto flex-1 custom-scrollbar p-5 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Function Name *</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{isPlace ? 'Place Name *' : 'Function Menu Name *'}</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. VIP Hall Package"
+              placeholder={isPlace ? 'e.g. Grand Ballroom, Garden Terrace' : 'e.g. VIP Package A'}
               className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
             />
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-slate-500">Items & Prices</label>
-              <button onClick={addItem} className="flex items-center gap-1 text-xs text-violet-600 font-semibold hover:text-violet-700">
-                <Plus className="w-3.5 h-3.5" /> Add Item
-              </button>
+          {isPlace ? (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Price (LKR)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+              />
             </div>
-            {items.length === 0 ? (
-              <div className="text-xs text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-xl">No items yet.</div>
-            ) : (
-              <div className="space-y-2">
-                {items.map((it) => (
-                  <div key={it.id} className="flex items-center gap-2 bg-slate-50 rounded-xl p-2">
-                    <input
-                      value={it.name}
-                      onChange={(e) => updateItem(it.id, 'name', e.target.value)}
-                      placeholder="Item name"
-                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400"
-                    />
-                    <input
-                      type="number"
-                      value={it.price}
-                      onChange={(e) => updateItem(it.id, 'price', e.target.value)}
-                      placeholder="Price"
-                      className="w-24 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 text-right"
-                    />
-                    <button onClick={() => removeItem(it.id)} className="text-red-400 hover:text-red-600 p-1">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Price per Person (LKR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
               </div>
-            )}
-          </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-slate-500">Item List</label>
+                  <button onClick={addItem} className="flex items-center gap-1 text-xs text-violet-600 font-semibold hover:text-violet-700">
+                    <Plus className="w-3.5 h-3.5" /> Add Item
+                  </button>
+                </div>
+                {items.length === 0 ? (
+                  <div className="text-xs text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-xl">No items yet.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {items.map((it) => (
+                      <div key={it.id} className="flex items-center gap-2 bg-slate-50 rounded-xl p-2">
+                        <input
+                          value={it.name}
+                          onChange={(e) => updateItem(it.id, 'name', e.target.value)}
+                          placeholder="Item name"
+                          className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400"
+                        />
+                        <button onClick={() => removeItem(it.id)} className="text-red-400 hover:text-red-600 p-1">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
           {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
 
@@ -1403,134 +1461,7 @@ function FunctionFormModal({
             disabled={saving}
             className="flex-1 px-4 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold shadow disabled:opacity-60"
           >
-            {saving ? 'Saving...' : isEdit ? 'Update Function' : 'Create Function'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Menu Picker Modal ────────────────────────────────────────────────────────
-
-function MenuPickerModal({
-  categories, products, onAdd, onClose,
-}: {
-  categories: Category[];
-  products: Product[];
-  onAdd: (product: Product) => void;
-  onClose: () => void;
-}) {
-  const [menuTab, setMenuTab] = useState<'function' | 'restaurant'>('function');
-  const [activeCatId, setActiveCatId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-
-  const filteredCats = categories.filter((c) => (c.menu_type || 'restaurant') === menuTab);
-
-  // Default to first category in the tab
-  const displayCatId = activeCatId && filteredCats.find((c) => c.id === activeCatId)
-    ? activeCatId
-    : (filteredCats[0]?.id || null);
-
-  const visibleProducts = products.filter((p) => {
-    const inCat = displayCatId ? p.category_id === displayCatId : true;
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    return inCat && matchSearch;
-  });
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-60 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[88vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
-          <h3 className="font-bold text-lg text-slate-800">Browse Menu</h3>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100">
-            <X className="w-5 h-5 text-slate-500" />
-          </button>
-        </div>
-
-        {/* Menu type tabs */}
-        <div className="flex gap-1 px-5 pt-4 pb-0">
-          <button
-            onClick={() => { setMenuTab('function'); setActiveCatId(null); }}
-            className={`px-5 py-2 rounded-t-xl text-sm font-bold border-b-2 transition-colors ${menuTab === 'function' ? 'border-violet-500 text-violet-700 bg-violet-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Function Menu
-          </button>
-          <button
-            onClick={() => { setMenuTab('restaurant'); setActiveCatId(null); }}
-            className={`px-5 py-2 rounded-t-xl text-sm font-bold border-b-2 transition-colors ${menuTab === 'restaurant' ? 'border-violet-500 text-violet-700 bg-violet-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Restaurant Menu
-          </button>
-        </div>
-        <div className="h-px bg-slate-200 mx-5" />
-
-        <div className="flex flex-1 overflow-hidden">
-          {/* Category sidebar */}
-          <div className="w-36 sm:w-44 shrink-0 border-r border-slate-100 overflow-y-auto py-2">
-            {filteredCats.length === 0 ? (
-              <p className="text-xs text-slate-400 px-3 py-4 text-center">
-                No {menuTab} categories yet.<br />
-                <span className="text-slate-300">Add categories in POS settings.</span>
-              </p>
-            ) : (
-              filteredCats.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCatId(cat.id)}
-                  className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors ${displayCatId === cat.id ? 'bg-violet-50 text-violet-700 border-r-2 border-violet-500' : 'text-slate-600 hover:bg-slate-50'}`}
-                >
-                  {cat.name}
-                </button>
-              ))
-            )}
-          </div>
-
-          {/* Products grid */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Search */}
-            <div className="px-4 pt-3 pb-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search items..."
-                  className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                />
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 gap-2 content-start">
-              {visibleProducts.length === 0 ? (
-                <div className="col-span-3 text-center text-slate-400 py-8 text-sm">No items found.</div>
-              ) : (
-                visibleProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => onAdd(p)}
-                    className="flex flex-col items-start bg-slate-50 hover:bg-violet-50 border border-slate-200 hover:border-violet-300 rounded-xl p-3 text-left transition-colors group"
-                  >
-                    {p.code && <span className="text-[10px] text-slate-400 mb-0.5">code - {p.code}</span>}
-                    <span className="text-sm font-semibold text-slate-800 group-hover:text-violet-700 leading-snug">{p.name}</span>
-                    <span className="text-sm font-bold text-slate-700 mt-1">{p.price.toFixed(2)}</span>
-                    <span className="mt-1.5 text-xs text-violet-600 font-semibold flex items-center gap-1">
-                      <Plus className="w-3 h-3" /> Add
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4 border-t border-slate-100 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold shadow transition-colors"
-          >
-            Done
+            {saving ? 'Saving...' : isEdit ? (isPlace ? 'Update Place' : 'Update Menu') : (isPlace ? 'Create Place' : 'Create Menu')}
           </button>
         </div>
       </div>

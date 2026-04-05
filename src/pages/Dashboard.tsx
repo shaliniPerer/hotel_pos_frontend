@@ -74,6 +74,7 @@ export default function Dashboard() {
   const [billOrders, setBillOrders] = useState<BillOrder[]>([]);
   const [billStatusFilter, setBillStatusFilter] = useState<'all' | 'active' | 'completed' | 'void'>('all');
   const [loading, setLoading] = useState(false);
+  const [monthlySales, setMonthlySales] = useState<{ month: string; label: string; total: number }[]>([]);
 
   useEffect(() => {
     if (user?.role === 'cashier') {
@@ -118,6 +119,24 @@ export default function Dashboard() {
         
         setTotalSales(totalSalesAmount);
         setTodaySales(todaySalesAmount);
+
+        // Build current year monthly sales (Jan–Dec)
+        const currentYear = new Date().getFullYear();
+        const monthMap: Record<string, number> = {};
+        for (let m = 1; m <= 12; m++) {
+          const key = `${currentYear}-${String(m).padStart(2, '0')}`;
+          monthMap[key] = 0;
+        }
+        completed.forEach((o: any) => {
+          const key = (o.created_at || '').slice(0, 7);
+          if (key in monthMap) monthMap[key] += o.total || 0;
+        });
+        const months = Object.entries(monthMap).map(([key, total]) => {
+          const [y, m] = key.split('-');
+          const label = new Date(Number(y), Number(m) - 1, 1).toLocaleString('default', { month: 'short' });
+          return { month: key, label, total };
+        });
+        setMonthlySales(months);
       }
     } catch (err) {
       console.error('Failed to fetch dashboard stats:', err);
@@ -279,27 +298,32 @@ export default function Dashboard() {
     if (!win) return;
     const totalQty = data.reduce((s, d) => s + d.quantity, 0);
     const totalAmt = data.reduce((s, d) => s + d.total_amount, 0);
-    const rows = data.map(d => `<tr><td>${d.product_name}</td><td style="text-align:right">${d.quantity}</td><td style="text-align:right">LKR ${d.total_amount.toFixed(2)}</td></tr>`).join('');
+    const _now = new Date();
+    const _pad = (n: number) => String(n).padStart(2, '0');
+    const _hh = _now.getHours(); const _ampm = _hh >= 12 ? 'PM' : 'AM'; const _h12 = _hh % 12 || 12;
+    const genTime = `${_pad(_now.getDate())}/${_pad(_now.getMonth()+1)}/${_now.getFullYear()} ${_pad(_h12)}.${_pad(_now.getMinutes())} ${_ampm}`;
+    const rows = data.map((d, i) => `<tr><td style="text-align:center">${i+1}</td><td>${d.product_name}</td><td style="text-align:right">${d.quantity}</td><td style="text-align:right">LKR ${d.total_amount.toFixed(2)}</td></tr>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Item Sales Report</title><style>
       body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:32px;color:#1e293b;}
       .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:24px;}
-      .title{font-size:26px;font-weight:700;color:#0891b2;}
-      .sub{font-size:13px;color:#64748b;margin-top:4px;}
+      .biz-name{font-size:22px;font-weight:700;color:#0f172a;}
+      .biz-info{font-size:12px;color:#475569;margin-top:3px;}
+      .report-title{font-size:18px;font-weight:700;color:#0891b2;margin-top:10px;}
+      .sub{font-size:12px;color:#64748b;margin-top:4px;}
       table{width:100%;border-collapse:collapse;margin-top:8px;}
       th{background:#0891b2;color:white;padding:10px 12px;text-align:left;font-size:12px;}
-      th:not(:first-child){text-align:right;}
       td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;}
       tr:hover td{background:#f8fafc;}
       .tfoot td{background:#f1f5f9;font-weight:700;border-top:2px solid #0891b2;}
       .footer{text-align:center;font-size:11px;color:#94a3b8;margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;}
       @media print{body{padding:16px;}}
     </style></head><body>
-    <div class="header"><div class="title">HotelMate POS</div><div class="sub">Item Sales Report &mdash; ${getDateLabel()}</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
-    <table><thead><tr><th>Product Name</th><th>Quantity Sold</th><th>Total Amount</th></tr></thead>
+    <div class="header"><div class="biz-name">The Tranquil</div><div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div><div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div><div class="report-title">Item Sales Report</div><div class="sub">Report Duration: ${getDateLabel()}</div><div class="sub">Generated: ${genTime}</div></div>
+    <table><thead><tr><th style="text-align:center;width:40px">#</th><th>Product Name</th><th style="text-align:right">Quantity Sold</th><th style="text-align:right">Total Amount</th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr><td><strong>TOTAL</strong></td><td style="text-align:right">${totalQty}</td><td style="text-align:right">LKR ${totalAmt.toFixed(2)}</td></tr></tfoot>
+    <tfoot><tr><td></td><td><strong>TOTAL</strong></td><td style="text-align:right">${totalQty}</td><td style="text-align:right">LKR ${totalAmt.toFixed(2)}</td></tr></tfoot>
     </table>
-    <div class="footer">HotelMate POS &mdash; Item Sales Report</div>
+    <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0891b2;text-decoration:underline;">https://clickinmo.com</a></div>
     </body></html>`);
     win.document.close();
     setTimeout(() => win.print(), 400);
@@ -310,27 +334,32 @@ export default function Dashboard() {
     if (!win) return;
     const totalOrders = data.reduce((s, d) => s + d.order_count, 0);
     const totalAmt = data.reduce((s, d) => s + d.total_amount, 0);
-    const rows = data.map(d => `<tr><td style="text-transform:capitalize">${d.payment_method.replace(/_/g,' ')}</td><td style="text-align:right">${d.order_count}</td><td style="text-align:right">LKR ${d.total_amount.toFixed(2)}</td></tr>`).join('');
+    const _now = new Date();
+    const _pad = (n: number) => String(n).padStart(2, '0');
+    const _hh = _now.getHours(); const _ampm = _hh >= 12 ? 'PM' : 'AM'; const _h12 = _hh % 12 || 12;
+    const genTime = `${_pad(_now.getDate())}/${_pad(_now.getMonth()+1)}/${_now.getFullYear()} ${_pad(_h12)}.${_pad(_now.getMinutes())} ${_ampm}`;
+    const rows = data.map((d, i) => `<tr><td style="text-align:center">${i+1}</td><td style="text-transform:capitalize">${d.payment_method.replace(/_/g,' ')}</td><td style="text-align:right">${d.order_count}</td><td style="text-align:right">LKR ${d.total_amount.toFixed(2)}</td></tr>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Payments Report</title><style>
       body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:32px;color:#1e293b;}
       .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:24px;}
-      .title{font-size:26px;font-weight:700;color:#0891b2;}
-      .sub{font-size:13px;color:#64748b;margin-top:4px;}
+      .biz-name{font-size:22px;font-weight:700;color:#0f172a;}
+      .biz-info{font-size:12px;color:#475569;margin-top:3px;}
+      .report-title{font-size:18px;font-weight:700;color:#0891b2;margin-top:10px;}
+      .sub{font-size:12px;color:#64748b;margin-top:4px;}
       table{width:100%;border-collapse:collapse;margin-top:8px;}
       th{background:#0891b2;color:white;padding:10px 12px;text-align:left;font-size:12px;}
-      th:not(:first-child){text-align:right;}
       td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;}
       tr:hover td{background:#f8fafc;}
       .tfoot td{background:#f1f5f9;font-weight:700;border-top:2px solid #0891b2;}
       .footer{text-align:center;font-size:11px;color:#94a3b8;margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;}
       @media print{body{padding:16px;}}
     </style></head><body>
-    <div class="header"><div class="title">HotelMate POS</div><div class="sub">Payments Report &mdash; ${getDateLabel()}</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
-    <table><thead><tr><th>Payment Method</th><th>Order Count</th><th>Total Amount</th></tr></thead>
+    <div class="header"><div class="biz-name">The Tranquil</div><div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div><div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div><div class="report-title">Payments Report</div><div class="sub">Report Duration: ${getDateLabel()}</div><div class="sub">Generated: ${genTime}</div></div>
+    <table><thead><tr><th style="text-align:center;width:40px">#</th><th>Payment Method</th><th style="text-align:right">Order Count</th><th style="text-align:right">Total Amount</th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr><td><strong>TOTAL</strong></td><td style="text-align:right">${totalOrders}</td><td style="text-align:right">LKR ${totalAmt.toFixed(2)}</td></tr></tfoot>
+    <tfoot><tr><td></td><td><strong>TOTAL</strong></td><td style="text-align:right">${totalOrders}</td><td style="text-align:right">LKR ${totalAmt.toFixed(2)}</td></tr></tfoot>
     </table>
-    <div class="footer">HotelMate POS &mdash; Payments Report</div>
+    <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0891b2;text-decoration:underline;">https://clickinmo.com</a></div>
     </body></html>`);
     win.document.close();
     setTimeout(() => win.print(), 400);
@@ -353,6 +382,13 @@ export default function Dashboard() {
             <h2 className="text-xl md:text-2xl font-bold text-slate-800">Dashboard & Analytics</h2>
             <p className="text-slate-500 text-xs md:text-sm mt-0.5">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </div>
+          <button
+            onClick={() => navigate('/')}
+            className="ml-auto flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <ShoppingCart size={16} />
+            <span className="hidden sm:inline">Go to POS</span>
+          </button>
         </header>
 
         <main className="p-4 md:p-8">
@@ -443,72 +479,65 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Food Categories Bar Chart */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-6 md:mb-8 p-4 md:p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-slate-800 uppercase">Sales by Food Categories</h3>
-              <div className="flex gap-2 items-center">
-                <span className="text-sm text-slate-600">
-                  {categorySalesData.length > 0 
-                    ? `${categorySalesData.length} Categories` 
-                    : 'No data'}
-                </span>
-              </div>
-            </div>
-            
-            {categorySalesData.length > 0 ? (
-              <div className="relative" style={{ height: `${chartHeight}px` }}>
-                <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-xs text-slate-500 w-16">
-                  <span>{maxCategoryValue.toLocaleString()}</span>
-                  <span>{(maxCategoryValue * 0.8).toLocaleString()}</span>
-                  <span>{(maxCategoryValue * 0.6).toLocaleString()}</span>
-                  <span>{(maxCategoryValue * 0.4).toLocaleString()}</span>
-                  <span>{(maxCategoryValue * 0.2).toLocaleString()}</span>
-                  <span>0</span>
+          {/* Monthly Sales Bar Chart */}
+          {(() => {
+            const maxMonthly = Math.max(...monthlySales.map(m => m.total), 1);
+            const barH = 220;
+            return (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-6 md:mb-8 p-4 md:p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold text-slate-800 uppercase">Monthly Sales</h3>
+                  <span className="text-sm text-slate-500">{new Date().getFullYear()}</span>
                 </div>
-                
-                <div className="ml-20 h-full flex items-end justify-around gap-3">
-                  {categorySalesData.map((category, idx) => (
-                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 max-w-30">
-                      <div className="w-full flex items-end justify-center" style={{ height: `${chartHeight - 50}px` }}>
-                        <div
-                          className="hover:opacity-80 transition-all rounded-t cursor-pointer"
-                          style={{ 
-                            height: `${(category.totalValue / maxCategoryValue) * 100}%`,
-                            width: '100%',
-                            maxWidth: '80px',
-                            backgroundColor: category.color || '#06b6d4',
-                            minHeight: category.totalValue > 0 ? '5px' : '0'
-                          }}
-                          title={`${category.name}\nValue: LKR ${category.totalValue.toLocaleString()}`}
-                        ></div>
-                      </div>
-                      <div className="text-xs text-slate-700 font-medium text-center leading-tight">
-                        {category.name}
-                      </div>
-                      <div className="text-xs font-semibold text-cyan-600">
-                        LKR {category.totalValue.toLocaleString()}
-                      </div>
+                {monthlySales.some(m => m.total > 0) ? (
+                  <div className="relative" style={{ height: `${barH + 60}px` }}>
+                    {/* Y-axis labels */}
+                    <div className="absolute left-0 top-0 flex flex-col justify-between text-xs text-slate-400 w-16" style={{ height: `${barH}px` }}>
+                      {[1, 0.8, 0.6, 0.4, 0.2, 0].map((r, i) => (
+                        <span key={i}>{Math.round(maxMonthly * r).toLocaleString()}</span>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                    {/* Bars */}
+                    <div className="ml-16 h-full flex items-end gap-1.5">
+                      {monthlySales.map((m, idx) => (
+                        <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+                          <div className="w-full flex items-end justify-center" style={{ height: `${barH}px` }}>
+                            <div
+                              className="w-full rounded-t hover:opacity-80 transition-all cursor-default"
+                              style={{
+                                height: `${(m.total / maxMonthly) * 100}%`,
+                                backgroundColor: '#06b6d4',
+                                minHeight: m.total > 0 ? '4px' : '0',
+                              }}
+                              title={`${m.label}\nLKR ${m.total.toLocaleString()}`}
+                            />
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-medium text-center leading-tight">{m.label}</div>
+                          <div className="text-[10px] font-semibold text-cyan-600 text-center">
+                            {m.total > 0 ? m.total.toLocaleString() : '—'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                    <BarChart3 size={48} className="mb-3 opacity-30" />
+                    <p className="text-sm">No sales data available</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                <BarChart3 size={48} className="mb-3 opacity-30" />
-                <p className="text-sm">No sales data available for selected date range</p>
-              </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Analytics Reports Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-8">
             <div className="border-b border-slate-100 px-6 py-4">
                 <div className="flex items-center justify-between flex-wrap gap-3">
-                <h3 className="text-lg font-bold text-slate-800 uppercase">Sales Reports</h3>
+                <h3 className="text-lg font-bold text-slate-800 uppercase">Reports</h3>
                 
                 {/* Date Filter */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative">
                     <button
                       onClick={() => setShowDatePicker(!showDatePicker)}
@@ -518,66 +547,47 @@ export default function Dashboard() {
                       <span className="capitalize">{dateFilter.replace('_', ' ')}</span>
                       <ChevronDown size={16} />
                     </button>
-                    
+
                     {showDatePicker && (
-                      <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 p-2 z-10">
-                        <button
-                          onClick={() => { setDateFilter('today'); setShowDatePicker(false); }}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded-lg text-sm"
-                        >
-                          Today
-                        </button>
-                        <button
-                          onClick={() => { setDateFilter('yesterday'); setShowDatePicker(false); }}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded-lg text-sm"
-                        >
-                          Yesterday
-                        </button>
-                        <button
-                          onClick={() => { setDateFilter('this_week'); setShowDatePicker(false); }}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded-lg text-sm"
-                        >
-                          This Week
-                        </button>
-                        <button
-                          onClick={() => { setDateFilter('this_month'); setShowDatePicker(false); }}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded-lg text-sm"
-                        >
-                          This Month
-                        </button>
-                        <button
-                          onClick={() => { setDateFilter('last_month'); setShowDatePicker(false); }}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded-lg text-sm"
-                        >
-                          Last Month
-                        </button>
-                        <div className="border-t border-slate-200 my-2"></div>
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 p-2 z-10">
+                        {(['today','yesterday','this_week','this_month','last_month'] as const).map(f => (
+                          <button
+                            key={f}
+                            onClick={() => { setDateFilter(f); setShowDatePicker(false); }}
+                            className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded-lg text-sm capitalize"
+                          >
+                            {f.replace('_', ' ')}
+                          </button>
+                        ))}
+                        <div className="border-t border-slate-200 my-1" />
                         <button
                           onClick={() => { setDateFilter('custom'); setShowDatePicker(false); }}
                           className="w-full text-left px-3 py-2 hover:bg-slate-100 rounded-lg text-sm"
                         >
                           Custom Range
                         </button>
-                        
-                        {dateFilter === 'custom' && (
-                          <div className="mt-2 p-2 space-y-2">
-                            <input
-                              type="date"
-                              value={startDate}
-                              onChange={(e) => setStartDate(e.target.value)}
-                              className="w-full px-2 py-1 border border-slate-300 rounded text-xs"
-                            />
-                            <input
-                              type="date"
-                              value={endDate}
-                              onChange={(e) => setEndDate(e.target.value)}
-                              className="w-full px-2 py-1 border border-slate-300 rounded text-xs"
-                            />
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
+
+                  {/* Inline date inputs shown next to button when Custom Range is selected */}
+                  {dateFilter === 'custom' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                      />
+                      <span className="text-slate-400 text-sm">to</span>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -736,7 +746,7 @@ export default function Dashboard() {
                   {/* Bills / Order Management */}
                   {activeTab === 'bills' && (() => {
                     const filtered = billStatusFilter === 'all'
-                      ? billOrders
+                      ? billOrders.filter(o => o.status !== 'void')
                       : billOrders.filter(o => o.status === billStatusFilter);
 
                     const completedBills = billOrders.filter(o => o.status === 'completed');
@@ -774,8 +784,12 @@ export default function Dashboard() {
                     const downloadBillsPDF = () => {
                       const win = window.open('', '_blank', 'width=1100,height=800');
                       if (!win) return;
+                      const _now = new Date();
+                      const _pad = (n: number) => String(n).padStart(2, '0');
+                      const _hh = _now.getHours(); const _ampm = _hh >= 12 ? 'PM' : 'AM'; const _h12 = _hh % 12 || 12;
+                      const genTime = `${_pad(_now.getDate())}/${_pad(_now.getMonth()+1)}/${_now.getFullYear()} ${_pad(_h12)}.${_pad(_now.getMinutes())} ${_ampm}`;
                       const rows = filtered.map((o, idx) => `<tr>
-                        <td>${o.order_number ? '#' + String(o.order_number).padStart(3,'0') : '—'}</td>
+                        <td style="text-align:center">${idx+1}</td>
                         <td>${typeLabel(o.type)}</td>
                         <td>${o.reference || '—'}</td>
                         <td style="max-width:180px">${(o.items||[]).map(i=>i.product_name+'×'+i.quantity).join(', ')||'—'}</td>
@@ -790,7 +804,9 @@ export default function Dashboard() {
                       win.document.write(`<!DOCTYPE html><html><head><title>Bills Report</title><style>
                         body{font-family:Arial,sans-serif;padding:24px;color:#1e293b;font-size:12px;}
                         .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:16px;margin-bottom:20px;}
-                        .title{font-size:22px;font-weight:700;color:#0891b2;}
+                        .biz-name{font-size:20px;font-weight:700;color:#0f172a;}
+                        .biz-info{font-size:11px;color:#475569;margin-top:2px;}
+                        .report-title{font-size:16px;font-weight:700;color:#0891b2;margin-top:8px;}
                         .sub{font-size:12px;color:#64748b;margin-top:3px;}
                         table{width:100%;border-collapse:collapse;}
                         th{background:#0891b2;color:white;padding:8px 10px;text-align:left;font-size:11px;}
@@ -804,16 +820,16 @@ export default function Dashboard() {
                         .footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;}
                         @media print{body{padding:12px;}}
                       </style></head><body>
-                      <div class="header"><div class="title">HotelMate POS</div><div class="sub">Bills Report &mdash; ${getDateLabel()}</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
+                      <div class="header"><div class="biz-name">The Tranquil</div><div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div><div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div><div class="report-title">Bills Report</div><div class="sub">Report Duration: ${getDateLabel()}</div><div class="sub">Generated: ${genTime}</div></div>
                       <div class="summary">
                         <div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0"><div style="font-size:10px;color:#16a34a;font-weight:700;text-transform:uppercase">Revenue</div><div style="font-size:18px;font-weight:700;color:#15803d">LKR ${totalRevenue.toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
                         <div class="card" style="background:#f0f9ff;border:1px solid #bae6fd"><div style="font-size:10px;color:#0284c7;font-weight:700;text-transform:uppercase">Completed</div><div style="font-size:18px;font-weight:700;color:#0369a1">${completedBills.length}</div></div>
                         <div class="card" style="background:#fffbeb;border:1px solid #fde68a"><div style="font-size:10px;color:#d97706;font-weight:700;text-transform:uppercase">Active</div><div style="font-size:18px;font-weight:700;color:#b45309">${activeBills.length}</div></div>
                         <div class="card" style="background:#fff1f2;border:1px solid #fecdd3"><div style="font-size:10px;color:#e11d48;font-weight:700;text-transform:uppercase">Voided</div><div style="font-size:18px;font-weight:700;color:#be123c">${voidedBills.length}</div></div>
                       </div>
-                      <table><thead><tr><th>#</th><th>Type</th><th>Reference</th><th>Items</th><th>Subtotal</th><th>Tax</th><th>Total</th><th>Payment</th><th>Status</th><th>Date &amp; Time</th></tr></thead>
+                      <table><thead><tr><th style="text-align:center;width:36px">#</th><th>Type</th><th>Reference</th><th>Items</th><th>Subtotal</th><th>Service Charge</th><th>Total</th><th>Payment</th><th>Status</th><th>Date &amp; Time</th></tr></thead>
                       <tbody>${rows}</tbody></table>
-                      <div class="footer">HotelMate POS &mdash; Bills Report &mdash; Showing ${filtered.length} records &mdash; Completed Revenue: LKR ${grandTotal.toFixed(2)}</div>
+                      <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0891b2;text-decoration:underline;">https://clickinmo.com</a></div>
                       </body></html>`);
                       win.document.close();
                       setTimeout(() => win.print(), 400);
@@ -892,7 +908,7 @@ export default function Dashboard() {
                                 <th className="px-4 py-3 font-semibold">Reference</th>
                                 <th className="px-4 py-3 font-semibold">Items</th>
                                 <th className="px-4 py-3 font-semibold text-right">Subtotal</th>
-                                <th className="px-4 py-3 font-semibold text-right">Tax</th>
+                                <th className="px-4 py-3 font-semibold text-right">Service Charge</th>
                                 <th className="px-4 py-3 font-semibold text-right">Total</th>
                                 <th className="px-4 py-3 font-semibold">Payment</th>
                                 <th className="px-4 py-3 font-semibold">Status</th>

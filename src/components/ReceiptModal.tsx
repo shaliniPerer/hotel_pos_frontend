@@ -29,6 +29,7 @@ interface Order {
   total: number;
   payment_method: string;
   paid_amount?: number;
+  staff_name?: string;
   created_at: string;
   items?: OrderItem[];
 }
@@ -299,7 +300,7 @@ export default function ReceiptModal({ order, payments, onClose, showPaymentDeta
   const [printed, setPrinted] = useState(false);
   const [printedAt, setPrintedAt] = useState<Date>(new Date());
 
-  const staffName = user?.name || 'Staff';
+  const staffName = order.staff_name || user?.name || 'Staff';
 
   const subtotal = order.subtotal || 0;
   const tax      = order.tax      || 0;

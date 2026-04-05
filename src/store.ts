@@ -8,6 +8,13 @@ interface User {
   name: string;
 }
 
+export interface StaffUser {
+  id: string;
+  username: string;
+  role: string;
+  name: string;
+}
+
 export interface Product {
   id: string;
   category_id: string;
@@ -16,6 +23,7 @@ export interface Product {
   image: string;
   code?: string;
   description?: string;
+  kot_type?: 'KOT' | 'BOT';
   kot?: boolean;
   bot?: boolean;
   visible?: boolean;
@@ -32,6 +40,8 @@ export interface Category {
 interface CartItem extends Product {
   quantity: number;
   note?: string;
+  kotType: 'KOT' | 'BOT';
+  cartKey: string;
 }
 
 interface Order {
@@ -46,6 +56,8 @@ interface Order {
   total: number;
   payment_method: string;
   cashier_id: string;
+  staff_id?: string;
+  staff_name?: string;
   created_at: string;
   updated_at: string;
   items?: any[];
@@ -59,6 +71,9 @@ interface AppState {
   products: Product[];
   cart: CartItem[];
   orders: Order[];
+  staffUsers: StaffUser[];
+  selectedStaffId: string | null;
+  selectedStaffName: string;
   orderType: 'table' | 'room' | 'takeaway' | 'delivery';
   orderReference: string;
   discount: number;
@@ -70,6 +85,11 @@ interface AppState {
   fetchCategories: () => Promise<void>;
   fetchProducts: () => Promise<void>;
   fetchOrders: () => Promise<void>;
+  fetchStaffUsers: () => Promise<void>;
+  createStaffUser: (data: { username: string; password: string; name: string; role: string }) => Promise<StaffUser>;
+  updateStaffUser: (id: string, data: { name?: string; role?: string; password?: string }) => Promise<void>;
+  deleteStaffUser: (id: string) => Promise<void>;
+  setSelectedStaff: (id: string | null, name: string) => void;
   addCategory: (cat: Omit<Category, 'id'>) => Promise<Category>;
   updateCategory: (id: string, cat: Partial<Omit<Category, 'id'>>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
@@ -80,6 +100,7 @@ interface AppState {
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   updateCartItemNote: (productId: string, note: string) => void;
+  changeKotType: (cartKey: string, newKotType: 'KOT' | 'BOT') => void;
   clearCart: () => void;
   setOrderType: (type: 'table' | 'room' | 'takeaway' | 'delivery', ref: string) => void;
   setDiscount: (discount: number) => void;
@@ -114,6 +135,9 @@ export const useStore = create<AppState>((set, get) => {
   products: [],
   cart: [],
   orders: [],
+  staffUsers: [],
+  selectedStaffId: null,
+  selectedStaffName: '',
   orderType: 'table',
   orderReference: '',
   discount: 0,
@@ -285,44 +309,65 @@ export const useStore = create<AppState>((set, get) => {
   },
 
   addToCart: (product) => {
+    const kotType = product.kot_type || 'KOT';
+    const cartKey = `${product.id}_${kotType}`;
     set((state) => {
-      const existing = state.cart.find((item) => item.id === product.id);
+      const existing = state.cart.find((item) => item.cartKey === cartKey);
       if (existing) {
         return {
           cart: state.cart.map((item) =>
-            item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+            item.cartKey === cartKey ? { ...item, quantity: item.quantity + 1 } : item
           )
         };
       }
-      return { cart: [...state.cart, { ...product, quantity: 1 }] };
+      return { cart: [...state.cart, { ...product, quantity: 1, kotType, cartKey }] };
     });
   },
 
-  removeFromCart: (productId) => {
+  removeFromCart: (cartKey) => {
     set((state) => ({
-      cart: state.cart.filter((item) => item.id !== productId)
+      cart: state.cart.filter((item) => item.cartKey !== cartKey)
     }));
   },
 
-  updateQuantity: (productId, quantity) => {
+  updateQuantity: (cartKey, quantity) => {
     set((state) => {
       if (quantity <= 0) {
-        return { cart: state.cart.filter((item) => item.id !== productId) };
+        return { cart: state.cart.filter((item) => item.cartKey !== cartKey) };
       }
       return {
         cart: state.cart.map((item) =>
-          item.id === productId ? { ...item, quantity } : item
+          item.cartKey === cartKey ? { ...item, quantity } : item
         )
       };
     });
   },
 
-  updateCartItemNote: (productId, note) => {
+  updateCartItemNote: (cartKey, note) => {
     set((state) => ({
       cart: state.cart.map((item) =>
-        item.id === productId ? { ...item, note } : item
+        item.cartKey === cartKey ? { ...item, note } : item
       )
     }));
+  },
+
+  changeKotType: (oldCartKey, newKotType) => {
+    set((state) => {
+      const item = state.cart.find(i => i.cartKey === oldCartKey);
+      if (!item || item.kotType === newKotType) return state;
+      const newCartKey = `${item.id}_${newKotType}`;
+      const existing = state.cart.find(i => i.cartKey === newCartKey);
+      if (existing) {
+        return {
+          cart: state.cart
+            .map(i => i.cartKey === newCartKey ? { ...i, quantity: i.quantity + item.quantity } : i)
+            .filter(i => i.cartKey !== oldCartKey)
+        };
+      }
+      return {
+        cart: state.cart.map(i => i.cartKey === oldCartKey ? { ...i, kotType: newKotType, cartKey: newCartKey } : i)
+      };
+    });
   },
 
   clearCart: () => set({ cart: [], discount: 0, orderReference: '' }),
@@ -337,6 +382,8 @@ export const useStore = create<AppState>((set, get) => {
     const { products } = get();
     const cartItems = order.items!.map(item => {
       const product = products.find(p => p.id === item.product_id);
+      const kotType: 'KOT' | 'BOT' = product?.kot_type || (product?.bot ? 'BOT' : 'KOT');
+      const cartKey = `${item.product_id}_${kotType}`;
       return {
         id: item.product_id,
         name: item.product_name,
@@ -344,7 +391,9 @@ export const useStore = create<AppState>((set, get) => {
         quantity: item.quantity,
         category_id: product?.category_id || '',
         image: product?.image || '',
-        code: product?.code || ''
+        code: product?.code || '',
+        kotType,
+        cartKey,
       };
     });
     set({
@@ -355,6 +404,49 @@ export const useStore = create<AppState>((set, get) => {
       activeOrderId: order.id
     });
   },
+
+  fetchStaffUsers: async () => {
+    try {
+      const res = await apiFetch('/api/users');
+      if (res.ok) {
+        const staffUsers = await res.json();
+        set({ staffUsers });
+      }
+    } catch (e) {
+      console.error('fetchStaffUsers error:', e);
+    }
+  },
+
+  createStaffUser: async (data) => {
+    const res = await apiFetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create user');
+    const created: StaffUser = await res.json();
+    set((state) => ({ staffUsers: [...state.staffUsers, created] }));
+    return created;
+  },
+
+  updateStaffUser: async (id, data) => {
+    const res = await apiFetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update user');
+    const updated: StaffUser = await res.json();
+    set((state) => ({ staffUsers: state.staffUsers.map((s) => s.id === id ? updated : s) }));
+  },
+
+  deleteStaffUser: async (id) => {
+    const res = await apiFetch(`/api/users/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete user');
+    set((state) => ({ staffUsers: state.staffUsers.filter((s) => s.id !== id) }));
+  },
+
+  setSelectedStaff: (id, name) => set({ selectedStaffId: id, selectedStaffName: name }),
 
   apiFetch,
   };

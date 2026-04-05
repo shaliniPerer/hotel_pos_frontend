@@ -144,7 +144,7 @@ export default function RoomService() {
   const [showRoomForm, setShowRoomForm] = useState(false);
   const [roomForm, setRoomForm] = useState({
     name: '',
-    room_type: 'standard',
+    room_type: 'deluxe',
     room_size: '',
     adults: '1',
     children: '0',
@@ -245,7 +245,7 @@ export default function RoomService() {
     setEditingRoom(room || null);
     setRoomForm(room ? {
       name: room.name,
-      room_type: room.room_type || 'standard',
+      room_type: room.room_type || 'deluxe',
       room_size: room.room_size || '',
       adults: (room.adults ?? 1).toString(),
       children: (room.children ?? 0).toString(),
@@ -253,7 +253,7 @@ export default function RoomService() {
       price: (room.price ?? 0).toString(),
     } : {
       name: '',
-      room_type: 'standard',
+      room_type: 'deluxe',
       room_size: '',
       adults: '1',
       children: '0',
@@ -450,22 +450,27 @@ export default function RoomService() {
 
   const downloadDashboardPDF = () => {
     const doc = new jsPDF();
-    const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const hh = now.getHours(); const ampm = hh >= 12 ? 'PM' : 'AM'; const h12 = hh % 12 || 12;
+    const genTime = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(h12)}.${pad(now.getMinutes())} ${ampm}`;
 
-    // Title
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Room Management Report', 14, 16);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${dateStr}`, 14, 23);
-
+    // Header
+    doc.setFontSize(15); doc.setFont('helvetica', 'bold');
+    doc.text('The Tranquil', pageWidth / 2, 16, { align: 'center' });
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text('No.194 / 1, Makola South, Makola, Sri Lanka', pageWidth / 2, 22, { align: 'center' });
+    doc.text('+94 11 2 965 888 / +94 77 5 072 909', pageWidth / 2, 27, { align: 'center' });
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+    doc.text('Room Management Report', pageWidth / 2, 35, { align: 'center' });
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${genTime}`, pageWidth / 2, 41, { align: 'center' });
     // Summary stats
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Summary', 14, 32);
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+    doc.text('Summary', 14, 56);
     autoTable(doc, {
-      startY: 36,
+      startY: 60,
       head: [['Metric', 'Count']],
       body: [
         ['Total Rooms', String(totalRooms)],
@@ -494,7 +499,7 @@ export default function RoomService() {
         );
         return [
           room.name,
-          (room.room_type || 'standard').charAt(0).toUpperCase() + (room.room_type || 'standard').slice(1),
+          (room.room_type || 'deluxe'),
           STATUS_LABELS[room.status],
           Number(room.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }),
           active ? active.customer_name : '—',
@@ -528,6 +533,15 @@ export default function RoomService() {
       doc.setFont('helvetica', 'normal');
       doc.text('No arrivals or departures today.', 14, afterRooms + 8);
     }
+
+    const footerY = (doc as any).lastAutoTable.finalY + 12;
+    doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150);
+    doc.text('Digital Solutions by Click Inmo Pvt Ltd.', pageWidth / 2, footerY, { align: 'center' });
+    doc.setTextColor(8, 145, 178);
+    doc.text('https://clickinmo.com', pageWidth / 2, footerY + 5, { align: 'center' });
+    const _dashUrlW = doc.getTextWidth('https://clickinmo.com');
+    doc.link((pageWidth - _dashUrlW) / 2, footerY + 1, _dashUrlW, 5, { url: 'https://clickinmo.com' });
+    doc.setTextColor(0, 0, 0);
 
     doc.save(`room-report-${today}.pdf`);
   };
@@ -648,13 +662,21 @@ export default function RoomService() {
                   {/* Dashboard header with download button */}
                   <div className="flex items-center justify-between">
                     <h3 className="text-base font-bold text-slate-800">Room Dashboard</h3>
-                    <button
-                      onClick={downloadDashboardPDF}
-                      disabled={rooms.length === 0}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-                    >
-                      <Download size={15} /> Download Report
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setActivePage('room-management')}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors"
+                      >
+                        <BedDouble size={15} /> Room Management
+                      </button>
+                      <button
+                        onClick={downloadDashboardPDF}
+                        disabled={rooms.length === 0}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                      >
+                        <Download size={15} /> Download Report
+                      </button>
+                    </div>
                   </div>
 
                   {/* Stats row */}
@@ -750,15 +772,15 @@ export default function RoomService() {
                     <EmptyState icon={<BedDouble size={32} />} message="No rooms yet. Add your first room." action="Add Room" onAction={() => openRoomForm()} />
                   ) : (
                     /* Group rooms by room type */
-                    (['standard', 'deluxe', 'suite', 'family'] as const).map((type) => {
-                      const typeRooms = rooms.filter((r) => (r.room_type || 'standard').toLowerCase() === type);
+                    (['deluxe', 'superior-king', 'superior', 'suite'] as const).map((type) => {
+                      const typeRooms = rooms.filter((r) => (r.room_type || 'deluxe').toLowerCase() === type);
                       if (typeRooms.length === 0) return null;
-                      const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+                      const typeLabel: Record<string,string> = { 'deluxe': 'Deluxe Room', 'superior-king': 'Superior King Room', 'superior': 'Superior Room', 'suite': 'Suite' };
                       return (
                         <div key={type}>
                           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                             <span className="w-5 h-px bg-slate-200 inline-block" />
-                            {typeLabel} Rooms
+                            {typeLabel[type]}
                             <span className="w-full h-px bg-slate-100 inline-block" />
                             <span className="text-slate-400 font-medium normal-case tracking-normal shrink-0">{typeRooms.length} room{typeRooms.length !== 1 ? 's' : ''}</span>
                           </h4>
@@ -930,13 +952,16 @@ export default function RoomService() {
                       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">2 — Select Room</p>
                         <div className="flex gap-1.5 flex-wrap">
-                          {(['', 'standard', 'deluxe', 'suite', 'family'] as const).map((t) => (
+                          {(['', 'deluxe', 'superior-king', 'superior', 'suite'] as const).map((t) => {
+                              const labels: Record<string,string> = { '': 'All', 'deluxe': 'Deluxe', 'superior-king': 'Superior King', 'superior': 'Superior', 'suite': 'Suite' };
+                              return (
                             <button key={t} type="button"
                               onClick={() => setBookingForm({ ...bookingForm, room_type_filter: t, room_id: '', rate_plan_name: '' })}
                               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${bookingForm.room_type_filter === t ? 'bg-cyan-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-                              {t === '' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
+                              {labels[t]}
                             </button>
-                          ))}
+                              );
+                            })}
                         </div>
                       </div>
                       {bfAvailableRooms.length === 0 ? (
@@ -954,7 +979,7 @@ export default function RoomService() {
                                 <BedDouble size={13} className="text-cyan-600 shrink-0" />
                                 <span className="text-sm font-bold text-slate-800">Room {room.name}</span>
                               </div>
-                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{room.room_type || 'standard'}</p>
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{room.room_type || 'deluxe'}</p>
                               {(room as any).price > 0 && (
                                 <p className="text-xs font-bold text-slate-600 mt-1">LKR {Number((room as any).price).toLocaleString()}<span className="text-[10px] font-normal text-slate-400">/night</span></p>
                               )}
@@ -1517,6 +1542,10 @@ export default function RoomService() {
                 const downloadPDF = () => {
                   const win = window.open('', '_blank', 'width=1100,height=780');
                   if (!win) return;
+                  const _now = new Date();
+                  const _pad = (n: number) => String(n).padStart(2, '0');
+                  const _hh = _now.getHours(); const _ampm = _hh >= 12 ? 'PM' : 'AM'; const _h12 = _hh % 12 || 12;
+                  const genTime = `${_pad(_now.getDate())}/${_pad(_now.getMonth()+1)}/${_now.getFullYear()} ${_pad(_h12)}.${_pad(_now.getMinutes())} ${_ampm}`;
                   const rows = rptFiltered.map((b, i) => `
                     <tr>
                       <td>${i + 1}</td>
@@ -1534,7 +1563,8 @@ export default function RoomService() {
                     *{box-sizing:border-box;margin:0;padding:0;}
                     body{font-family:Arial,sans-serif;font-size:11px;color:#1e293b;padding:24px;}
                     .header{text-align:center;border-bottom:3px solid #0d9488;padding-bottom:14px;margin-bottom:18px;}
-                    .title{font-size:22px;font-weight:700;color:#0d9488;}.sub{font-size:11px;color:#64748b;margin-top:3px;}
+                    .biz-name{font-size:22px;font-weight:700;color:#0f172a;}.biz-info{font-size:11px;color:#475569;margin-top:3px;}
+                    .report-title{font-size:16px;font-weight:700;color:#0d9488;margin-top:8px;}.sub{font-size:11px;color:#64748b;margin-top:3px;}
                     .filters{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
                     .filter-item{background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;padding:5px 10px;font-size:10px;}
                     .filter-item strong{color:#0f766e;}
@@ -1553,9 +1583,12 @@ export default function RoomService() {
                     .footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:18px;border-top:1px solid #e2e8f0;padding-top:10px;}
                   </style></head><body>
                   <div class="header">
-                    <div class="title">HotelMate POS</div>
-                    <div class="sub">Room Booking Report</div>
-                    <div class="sub">Generated: ${new Date().toLocaleString()}</div>
+                    <div class="biz-name">The Tranquil</div>
+                    <div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div>
+                    <div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div>
+                    <div class="report-title">Room Booking Report</div>
+                    <div class="sub">Report Duration: ${formatDate(rptFromDate)} &mdash; ${formatDate(rptToDate)}</div>
+                    <div class="sub">Generated: ${genTime}</div>
                   </div>
                   <div class="filters">
                     <div class="filter-item"><strong>Check-in From:</strong> ${formatDate(rptFromDate)}</div>
@@ -1583,7 +1616,7 @@ export default function RoomService() {
                       <td style="text-align:right">LKR ${totalAmount.toFixed(2)}</td>
                     </tr>
                   </tbody></table>
-                  <div class="footer">HotelMate POS — Room Booking Report — ${rptFiltered.length} record(s)</div>
+                  <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0d9488;text-decoration:underline;">https://clickinmo.com</a></div>
                   </body></html>`);
                   win.document.close();
                   setTimeout(() => win.print(), 400);
@@ -1758,10 +1791,10 @@ export default function RoomService() {
                 <FormField label="Room Type *">
                   <select value={roomForm.room_type} onChange={(e) => setRoomForm({ ...roomForm, room_type: e.target.value })}
                     className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400">
-                    <option value="standard">Standard</option>
-                    <option value="deluxe">Deluxe</option>
+                    <option value="deluxe">Deluxe Room</option>
+                    <option value="superior-king">Superior King Room</option>
+                    <option value="superior">Superior Room</option>
                     <option value="suite">Suite</option>
-                    <option value="family">Family</option>
                   </select>
                 </FormField>
                 <FormField label="Room No *">
@@ -2023,7 +2056,15 @@ export default function RoomService() {
           doc.text('No.194 / 1, Makola South, Makola, Sri Lanka', pageWidth / 2, y, { align: 'center' });
           y += 5;
           doc.text('+94 11 2 965 888 / +94 77 5 072 909', pageWidth / 2, y, { align: 'center' });
-          y += 8;
+          y += 5;
+          // Generated time
+          const _rpNow = new Date();
+          const _rpPad = (n: number) => String(n).padStart(2, '0');
+          const _rpHh = _rpNow.getHours(); const _rpAmpm = _rpHh >= 12 ? 'PM' : 'AM'; const _rpH12 = _rpHh % 12 || 12;
+          const _rpGen = `${_rpPad(_rpNow.getDate())}/${_rpPad(_rpNow.getMonth()+1)}/${_rpNow.getFullYear()} ${_rpPad(_rpH12)}.${_rpPad(_rpNow.getMinutes())} ${_rpAmpm}`;
+          doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+          doc.text(`Generated: ${_rpGen}`, pageWidth / 2, y, { align: 'center' });
+          y += 3;
           doc.setDrawColor(180, 180, 180); doc.line(margin, y, pageWidth - margin, y); y += 8;
 
           // ── Title ─────────────────────────────────────────────────────────
@@ -2097,7 +2138,12 @@ export default function RoomService() {
           const footerY = pageHeight - 15;
           doc.setDrawColor(180, 180, 180); doc.line(margin, footerY, pageWidth - margin, footerY);
           doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150);
-          doc.text('Thank you for choosing The Tranquil Hotel & Restaurant. We look forward to welcoming you.', pageWidth / 2, footerY + 6, { align: 'center' });
+          doc.text('Digital Solutions by Click Inmo Pvt Ltd.', pageWidth / 2, footerY + 6, { align: 'center' });
+          doc.setTextColor(8, 145, 178);
+          doc.text('https://clickinmo.com', pageWidth / 2, footerY + 11, { align: 'center' });
+          const _resUrlW = doc.getTextWidth('https://clickinmo.com');
+          doc.link((pageWidth - _resUrlW) / 2, footerY + 7, _resUrlW, 5, { url: 'https://clickinmo.com' });
+          doc.setTextColor(0, 0, 0);
 
           doc.save(`Reservation-${pb.reservation_number || 'download'}.pdf`);
         };

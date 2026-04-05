@@ -12,7 +12,7 @@ type EditState = {
   description: string;
   price: string;
   category_id: string;
-  kot: boolean;
+  kot_type: 'KOT' | 'BOT';
 };
 
 export default function ManageItemsModal({ onClose }: Props) {
@@ -43,7 +43,7 @@ export default function ManageItemsModal({ onClose }: Props) {
       id: p.id, code: p.code || '', name: p.name,
       description: p.description || '',
       price: String(p.price), category_id: p.category_id,
-      kot: p.kot ?? false,
+      kot_type: p.kot_type || 'KOT',
     });
     setError('');
   }
@@ -62,7 +62,7 @@ export default function ManageItemsModal({ onClose }: Props) {
         code: editState.code, name: editState.name.trim(),
         description: editState.description, price,
         category_id: editState.category_id,
-        kot: editState.kot,
+        kot_type: editState.kot_type,
       });
       cancelEdit();
     } catch (e: any) { setError(e.message || 'Save failed.'); }
@@ -129,7 +129,7 @@ export default function ManageItemsModal({ onClose }: Props) {
                 <th className="text-left px-6 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Item</th>
                 <th className="text-left px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Category</th>
                 <th className="text-right px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Price</th>
-                <th className="text-center px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">KOT</th>
+                <th className="text-center px-3 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Type</th>
                 <th className="px-6 py-3 w-24"></th>
               </tr>
             </thead>
@@ -157,8 +157,8 @@ export default function ManageItemsModal({ onClose }: Props) {
                     </td>
                     <td className="px-3 py-3 text-slate-600">{categoryName(product.category_id)}</td>
                     <td className="px-3 py-3 text-right font-semibold text-slate-900">LKR {product.price.toFixed(2)}</td>
-                    <td className="px-3 py-3 text-center text-xs text-slate-500">
-                      {product.kot && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">KOT</span>}
+                    <td className="px-3 py-3 text-center text-xs">
+                      <span className={`px-2 py-0.5 rounded font-bold ${(product.kot_type || 'KOT') === 'BOT' ? 'bg-amber-100 text-amber-700' : 'bg-cyan-100 text-cyan-700'}`}>{product.kot_type || 'KOT'}</span>
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-end gap-2">
@@ -238,11 +238,15 @@ export default function ManageItemsModal({ onClose }: Props) {
                               )}
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-slate-500 mb-2">Options</label>
+                              <label className="block text-xs font-semibold text-slate-500 mb-2">Ticket Type</label>
                               <div className="flex gap-4">
                                 <label className="flex items-center gap-2 cursor-pointer">
-                                  <input type="checkbox" checked={editState.kot} onChange={e => setEditState(s => s ? { ...s, kot: e.target.checked } : s)} className="rounded" />
-                                  <span className="text-sm text-slate-700">KOT</span>
+                                  <input type="radio" name="editKotType" checked={editState.kot_type === 'KOT'} onChange={() => setEditState(s => s ? { ...s, kot_type: 'KOT' } : s)} className="w-4 h-4 text-cyan-600" />
+                                  <span className="text-sm font-medium text-cyan-700">KOT</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input type="radio" name="editKotType" checked={editState.kot_type === 'BOT'} onChange={() => setEditState(s => s ? { ...s, kot_type: 'BOT' } : s)} className="w-4 h-4 text-amber-600" />
+                                  <span className="text-sm font-medium text-amber-700">BOT</span>
                                 </label>
                               </div>
                             </div>

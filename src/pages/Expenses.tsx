@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../store';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   LogOut, Plus, Trash2, Edit2, X, ShoppingCart, TrendingUp,
   CalendarDays, BedDouble, Receipt, Tag, List, FileText,
@@ -48,6 +48,8 @@ const SUB_NAV: { id: SubPage; label: string; icon: React.ReactNode }[] = [
   { id: 'new-category',    label: 'New Category',    icon: <Tag size={17} /> },
 ];
 
+const VALID_TABS: SubPage[] = ['expenses-list', 'new-expense', 'categories-list', 'new-category'];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,8 +57,19 @@ const SUB_NAV: { id: SubPage; label: string; icon: React.ReactNode }[] = [
 export default function Expenses() {
   const { user, token, logout, apiFetch } = useStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showSidebar, setShowSidebar] = useState(false);
-  const [activePage, setActivePage] = useState<SubPage>('expenses-list');
+
+  // Derive active tab entirely from URL — always in sync
+  const activePage = useMemo<SubPage>(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab') as SubPage;
+    return VALID_TABS.includes(tab) ? tab : 'expenses-list';
+  }, [location.search]);
+
+  const setActivePage = useCallback((page: SubPage) => {
+    navigate(`/expenses?tab=${page}`, { replace: true });
+  }, [navigate]);
 
   // Data
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -76,6 +89,7 @@ export default function Expenses() {
   const [expenseFormLoading, setExpenseFormLoading] = useState(false);
   const [expenseFormError, setExpenseFormError] = useState('');
   const [expenseFormSuccess, setExpenseFormSuccess] = useState('');
+  const [imageUploading, setImageUploading] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
 
@@ -105,17 +119,32 @@ export default function Expenses() {
 
   const downloadPDF = () => {
     const doc = new jsPDF();
-    doc.setFontSize(14);
-    doc.text('Expenses Report', 14, 15);
-    doc.setFontSize(9);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 22);
-    if (searchDateFrom || searchDateTo) {
-      doc.text(`Period: ${searchDateFrom || '—'} to ${searchDateTo || '—'}`, 14, 28);
-    }
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const hh = now.getHours(); const ampm = hh >= 12 ? 'PM' : 'AM'; const h12 = hh % 12 || 12;
+    const genTime = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(h12)}.${pad(now.getMinutes())} ${ampm}`;
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Header
+    doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+    doc.text('The Tranquil', pageWidth / 2, 16, { align: 'center' });
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text('No.194 / 1, Makola South, Makola, Sri Lanka', pageWidth / 2, 22, { align: 'center' });
+    doc.text('+94 11 2 965 888 / +94 77 5 072 909', pageWidth / 2, 27, { align: 'center' });
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+    doc.text('Expenses Report', pageWidth / 2, 35, { align: 'center' });
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    const periodStr = (searchDateFrom || searchDateTo)
+      ? `Report Duration: ${searchDateFrom || '—'} to ${searchDateTo || '—'}`
+      : 'Report Duration: All Time';
+    doc.text(periodStr, pageWidth / 2, 41, { align: 'center' });
+    doc.text(`Generated: ${genTime}`, pageWidth / 2, 46, { align: 'center' });
+
     autoTable(doc, {
-      startY: searchDateFrom || searchDateTo ? 34 : 28,
-      head: [['Date', 'Category', 'Reference No.', 'Expense For', 'Amount (LKR)', 'Created By']],
-      body: filteredExpenses.map((e) => [
+      startY: 52,
+      head: [['#', 'Date', 'Category', 'Reference No.', 'Expense For', 'Amount (LKR)', 'Created By']],
+      body: filteredExpenses.map((e, i) => [
+        i + 1,
         e.expense_date,
         e.category_name || '—',
         e.reference_no || '—',
@@ -123,11 +152,22 @@ export default function Expenses() {
         Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2 }),
         e.created_by || '—',
       ]),
-      foot: [['', '', '', 'Total', filteredExpenses.reduce((s, e) => s + Number(e.amount), 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), '']],
+      foot: [['', '', '', '', 'Total', filteredExpenses.reduce((s, e) => s + Number(e.amount), 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), '']],
       headStyles: { fillColor: [8, 145, 178] },
       footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' },
       styles: { fontSize: 8 },
+      columnStyles: { 0: { cellWidth: 10, halign: 'center' } },
     });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150);
+    doc.text('Digital Solutions by Click Inmo Pvt Ltd.', pageWidth / 2, finalY, { align: 'center' });
+    doc.setTextColor(8, 145, 178);
+    doc.text('https://clickinmo.com', pageWidth / 2, finalY + 5, { align: 'center' });
+    const _expUrlW = doc.getTextWidth('https://clickinmo.com');
+    doc.link((pageWidth - _expUrlW) / 2, finalY + 1, _expUrlW, 5, { url: 'https://clickinmo.com' });
+    doc.setTextColor(0, 0, 0);
+
     doc.save(`expenses-${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
@@ -288,13 +328,20 @@ export default function Expenses() {
                 onClick={() => { setActivePage(item.id); setShowSidebar(false); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-sm text-left ${
                   activePage === item.id
-                    ? 'bg-cyan-600 text-white font-semibold'
+                    ? 'bg-orange-500 text-white font-semibold'
                     : 'hover:bg-slate-800 text-slate-300'
                 }`}
               >
                 {item.icon}<span>{item.label}</span>
               </button>
             ))}
+            <Link
+              to="/expenses-dashboard"
+              onClick={() => setShowSidebar(false)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-sm text-left hover:bg-slate-800 text-slate-300"
+            >
+              <TrendingUp size={16} className="shrink-0" /><span>Dashboard</span>
+            </Link>
           </>
         }
       />
@@ -378,17 +425,35 @@ export default function Expenses() {
                         </FormField>
                         <FormField label="Image">
                           <input type="file" accept="image/*"
-                            onChange={(e) => {
+                            disabled={imageUploading}
+                            onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => setExpenseForm(f => ({ ...f, image: reader.result as string }));
-                              reader.readAsDataURL(file);
+                              setImageUploading(true);
+                              setExpenseFormError('');
+                              try {
+                                const formData = new FormData();
+                                formData.append('image', file);
+                                const res = await apiFetch('/api/expenses/upload-image', {
+                                  method: 'POST',
+                                  body: formData,
+                                });
+                                if (!res.ok) throw new Error('Upload failed');
+                                const { url } = await res.json();
+                                setExpenseForm(f => ({ ...f, image: url }));
+                              } catch {
+                                setExpenseFormError('Image upload failed. Please try again.');
+                              } finally {
+                                setImageUploading(false);
+                              }
                             }}
                             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                          {expenseForm.image && (
+                          {imageUploading && (
+                            <p className="text-xs text-cyan-600 mt-1">Uploading image…</p>
+                          )}
+                          {expenseForm.image && !imageUploading && (
                             <div className="relative mt-2">
-                              <img src={expenseForm.image} alt="Expense" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                              <img src={expenseForm.image.startsWith('/') ? `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${expenseForm.image}` : expenseForm.image} alt="Expense" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
                               <button type="button" onClick={() => setExpenseForm(f => ({ ...f, image: '' }))}
                                 className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 hover:bg-red-700">
                                 <X size={12} />
@@ -518,7 +583,10 @@ export default function Expenses() {
                                 <td className="px-4 py-3.5 font-semibold text-slate-800 whitespace-nowrap">{Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                 <td className="px-4 py-3.5">
                                   {e.image
-                                    ? <img src={e.image} alt="expense" className="w-12 h-10 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(e.image, '_blank')} />
+                                    ? (() => {
+                                        const src = e.image.startsWith('/') ? `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${e.image}` : e.image;
+                                        return <img src={src} alt="expense" className="w-12 h-10 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(src, '_blank')} />;
+                                      })()
                                     : <span className="text-slate-400">—</span>}
                                 </td>
                                 <td className="px-4 py-3.5 text-slate-500 max-w-xs truncate">{e.note || '—'}</td>

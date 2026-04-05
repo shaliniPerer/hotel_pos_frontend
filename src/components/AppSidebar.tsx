@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, TrendingUp, CalendarDays, BedDouble, Receipt,
   LogOut, X, List, Tag, FileText, LayoutDashboard, BookOpen,
-  ClipboardList, Calendar, PlaneLanding, BarChart2, ListOrdered,
+  ClipboardList, Calendar, PlaneLanding, BarChart2, ListOrdered, Users,
 } from 'lucide-react';
 import { useStore } from '../store';
 
@@ -26,6 +26,7 @@ export default function AppSidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const path = location.pathname;
+  const search = location.search;
 
   const handleLogout = () => {
     logout();
@@ -64,7 +65,7 @@ export default function AppSidebar({
         <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div>
             <h1 className="text-base font-bold text-white leading-tight">The Tranquil</h1>
-            <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Hotel & Restaurant</span>
+            <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Hotel Management System</span>
           </div>
           <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white">
             <X size={18} />
@@ -77,9 +78,17 @@ export default function AppSidebar({
           {/* ── Hotel Management System ── */}
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-500 px-2 mb-2">
-              Hotel Management System
+              Resturant Management System
             </p>
             <div className="space-y-0.5">
+               <Link
+                to="/dashboard"
+                onClick={onClose}
+                className={linkCls(path === '/dashboard', 'cyan')}
+              >
+                <TrendingUp size={16} className="shrink-0" />
+                <span>Dashboard</span>
+              </Link>
               <Link
                 to="/"
                 onClick={onClose}
@@ -88,13 +97,14 @@ export default function AppSidebar({
                 <ShoppingCart size={16} className="shrink-0" />
                 <span>POS</span>
               </Link>
+             
               <Link
-                to="/dashboard"
+                to="/users"
                 onClick={onClose}
-                className={linkCls(path === '/dashboard', 'cyan')}
+                className={linkCls(path === '/users', 'cyan')}
               >
-                <TrendingUp size={16} className="shrink-0" />
-                <span>Dashboard</span>
+                <Users size={16} className="shrink-0" />
+                <span>Staff Users</span>
               </Link>
               {/* <Link
                 to="/reports"
@@ -114,14 +124,6 @@ export default function AppSidebar({
             </p>
             <div className="space-y-0.5">
               <Link
-                to="/events"
-                onClick={onClose}
-                className={linkCls(path === '/events', 'violet')}
-              >
-                <CalendarDays size={16} className="shrink-0" />
-                <span>Event Management</span>
-              </Link>
-              <Link
                 to="/events-dashboard"
                 onClick={onClose}
                 className={linkCls(path === '/events-dashboard', 'violet')}
@@ -129,6 +131,15 @@ export default function AppSidebar({
                 <TrendingUp size={16} className="shrink-0" />
                 <span>Dashboard</span>
               </Link>
+              <Link
+                to="/events"
+                onClick={onClose}
+                className={linkCls(path === '/events', 'violet')}
+              >
+                <CalendarDays size={16} className="shrink-0" />
+                <span>Event Management</span>
+              </Link>
+              
             </div>
           </div>
 
@@ -141,7 +152,7 @@ export default function AppSidebar({
               {roomManagementSlot ?? (
                 <>
                   <Link to="/room-service" onClick={onClose} className={linkCls(path === '/room-service', 'teal')}>
-                    <LayoutDashboard size={16} className="shrink-0" />
+                    <TrendingUp size={16} className="shrink-0" />
                     <span>Dashboard</span>
                   </Link>
                   <Link to="/room-service" onClick={onClose} className={linkCls(false, 'teal')}>
@@ -181,26 +192,28 @@ export default function AppSidebar({
             <div className="space-y-0.5">
               {expensesSlot ?? (
                 <>
-                  <Link to="/expenses" onClick={onClose} className={linkCls(path === '/expenses', 'orange')}>
-                    <List size={16} className="shrink-0" />
-                    <span>Expenses List</span>
-                  </Link>
-                  <Link to="/expenses" onClick={onClose} className={linkCls(false, 'orange')}>
-                    <Receipt size={16} className="shrink-0" />
-                    <span>New Expense</span>
-                  </Link>
-                  <Link to="/expenses" onClick={onClose} className={linkCls(false, 'orange')}>
-                    <FileText size={16} className="shrink-0" />
-                    <span>Categories List</span>
-                  </Link>
-                  <Link to="/expenses" onClick={onClose} className={linkCls(false, 'orange')}>
-                    <Tag size={16} className="shrink-0" />
-                    <span>New Category</span>
-                  </Link>
-                  <Link to="/expenses-dashboard" onClick={onClose} className={linkCls(path === '/expenses-dashboard', 'orange')}>
+                <Link to="/expenses-dashboard" onClick={onClose} className={linkCls(path === '/expenses-dashboard', 'orange')}>
                     <TrendingUp size={16} className="shrink-0" />
                     <span>Dashboard</span>
                   </Link>
+                  <Link to="/expenses?tab=expenses-list" onClick={onClose} className={linkCls(path === '/expenses' && (!search || search === '?tab=expenses-list'), 'orange')}>
+                    <List size={16} className="shrink-0" />
+                    <span>Expenses List</span>
+                  </Link>
+                   
+                  <Link to="/expenses?tab=new-expense" onClick={onClose} className={linkCls(search === '?tab=new-expense', 'orange')}>
+                    <Receipt size={16} className="shrink-0" />
+                    <span>New Expense</span>
+                  </Link>
+                  <Link to="/expenses?tab=categories-list" onClick={onClose} className={linkCls(search === '?tab=categories-list', 'orange')}>
+                    <FileText size={16} className="shrink-0" />
+                    <span>Categories List</span>
+                  </Link>
+                  <Link to="/expenses?tab=new-category" onClick={onClose} className={linkCls(search === '?tab=new-category', 'orange')}>
+                    <Tag size={16} className="shrink-0" />
+                    <span>New Category</span>
+                  </Link>
+                 
                 </>
               )}
             </div>

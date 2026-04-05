@@ -27,15 +27,19 @@ export default function POS() {
   const { 
     user, token, categories, products, cart, orderType, orderReference, discount, activeOrderId,
     fetchCategories, fetchProducts, fetchOrders, initSocket, addToCart, removeFromCart, updateQuantity,
-    updateCartItemNote, clearCart, setOrderType, setDiscount, logout, setActiveOrderId, apiFetch, orders
+    updateCartItemNote, clearCart, setOrderType, setDiscount, logout, setActiveOrderId, apiFetch, orders,
+    staffUsers, selectedStaffId, selectedStaffName, fetchStaffUsers, setSelectedStaff
   } = useStore();
   
   const navigate = useNavigate();
+  const [showStaffDropdown, setShowStaffDropdown] = useState(false);
+  const staffDropdownRef = useRef<HTMLDivElement>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [showKOTModal, setShowKOTModal] = useState(false);
+  const [kotTicketStep, setKotTicketStep] = useState<'KOT' | 'BOT'>('KOT');
   const [showOrdersManagementModal, setShowOrdersManagementModal] = useState(false);
   const [currentOrderNumber, setCurrentOrderNumber] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState<'dine_in' | 'takeaway' | 'room_service' | 'delivery'>('dine_in');
@@ -94,8 +98,19 @@ export default function POS() {
     fetchCategories();
     fetchProducts();
     fetchOrders();
+    fetchStaffUsers();
     initSocket();
   }, [token]);
+
+  useEffect(() => {
+    function handleClickOutsideStaff(e: MouseEvent) {
+      if (staffDropdownRef.current && !staffDropdownRef.current.contains(e.target as Node)) {
+        setShowStaffDropdown(false);
+      }
+    }
+    if (showStaffDropdown) document.addEventListener('mousedown', handleClickOutsideStaff);
+    return () => document.removeEventListener('mousedown', handleClickOutsideStaff);
+  }, [showStaffDropdown]);
 
   useEffect(() => {
     // keep activeCategory as null so "All" is selected by default
@@ -131,7 +146,7 @@ export default function POS() {
   });
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = subtotal * 0.1; // 10% tax
+  const tax = (deliveryMethod === 'takeaway' || deliveryMethod === 'delivery') ? 0 : subtotal * 0.1; // 10% service charge (dine-in & room service only)
   const total = subtotal + tax - discount;
 
   const handleCheckout = async () => {
@@ -152,7 +167,8 @@ export default function POS() {
           total,
           payment_method: paymentMethod,
           paid_amount: paymentMethod === 'cash' && paidAmount ? parseFloat(paidAmount) : total,
-          status: 'completed'
+          status: 'completed',
+          ...(selectedStaffId ? { staff_id: selectedStaffId, staff_name: selectedStaffName } : {}),
         })
       });
 
@@ -194,7 +210,8 @@ export default function POS() {
           discount,
           total,
           payment_method: paymentMethod,
-          status: 'active'
+          status: 'active',
+          ...(selectedStaffId ? { staff_id: selectedStaffId, staff_name: selectedStaffName } : {}),
         })
       });
 
@@ -366,10 +383,12 @@ export default function POS() {
                   </div>
                   <h3 className={`font-bold text-[13px] leading-tight mb-1 line-clamp-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{product.name}</h3>
                   <p className={`text-[11px] mb-2 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>code - {product.code || product.id.slice(0,4).toUpperCase()}</p>
-                  <p className={`font-bold text-base mb-3 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{product.price.toFixed(2)}</p>
-                  <button onClick={() => handleAddToCart(product)} className={`mt-auto w-full py-3 border rounded-lg flex items-center justify-center gap-2 text-base font-semibold ${isDarkMode ? 'border-slate-600 hover:bg-slate-700 text-slate-200' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
-                    <Plus size={20} /> Add
-                  </button>
+                  <p className={`font-bold text-base mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{product.price.toFixed(2)}</p>
+                  <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mb-2 ${(product.kot_type || 'KOT') === 'BOT' ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDarkMode ? 'bg-cyan-900/50 text-cyan-300' : 'bg-cyan-100 text-cyan-700')}`}>{product.kot_type || 'KOT'}</span>
+                  <button
+                    onClick={() => handleAddToCart(product)}
+                    className={`mt-auto w-full py-2 border rounded-lg text-sm font-medium transition-colors ${isDarkMode ? 'border-slate-600 hover:bg-slate-700 text-slate-200' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}
+                  >Add</button>
                 </div>
               ))}
             </div>
@@ -386,6 +405,51 @@ export default function POS() {
                 <button onClick={() => setIsCartOpen(false)} className={`md:hidden p-1.5 rounded-lg ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'}`}><X size={20} /></button>
               </div>
             </div>
+
+            {/* Staff selector */}
+            <div className={`px-4 py-2.5 border-b ${isDarkMode ? 'border-slate-700 bg-slate-900/40' : 'border-slate-100 bg-slate-50/60'}`}>
+              <div className="relative" ref={staffDropdownRef}>
+                <button
+                  onClick={() => setShowStaffDropdown(v => !v)}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                >
+                  <span className="flex items-center gap-2">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${selectedStaffId ? 'bg-cyan-500 text-white' : (isDarkMode ? 'bg-slate-600 text-slate-400' : 'bg-slate-200 text-slate-500')}`}>
+                      {selectedStaffName ? selectedStaffName.charAt(0).toUpperCase() : '?'}
+                    </div>
+                    <span className={selectedStaffId ? '' : (isDarkMode ? 'text-slate-400' : 'text-slate-400')}>
+                      {selectedStaffName || 'Select Staff'}
+                    </span>
+                  </span>
+                  <ChevronDown size={14} className={`transition-transform ${showStaffDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showStaffDropdown && (
+                  <div className={`absolute left-0 right-0 top-full mt-1 rounded-xl border shadow-lg z-50 overflow-hidden max-h-52 overflow-y-auto ${isDarkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'}`}>
+                    <button
+                      onClick={() => { setSelectedStaff(null, ''); setShowStaffDropdown(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm border-b flex items-center gap-2 ${isDarkMode ? 'text-slate-400 hover:bg-slate-700 border-slate-700' : 'text-slate-400 hover:bg-slate-50 border-slate-100'}`}
+                    >
+                      <span>— No Staff —</span>
+                    </button>
+                    {staffUsers.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => { setSelectedStaff(s.id, s.name); setShowStaffDropdown(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 ${selectedStaffId === s.id ? (isDarkMode ? 'bg-cyan-800 text-white' : 'bg-cyan-50 text-cyan-700 font-semibold') : (isDarkMode ? 'text-slate-200 hover:bg-slate-700' : 'text-slate-700 hover:bg-slate-50')}`}
+                      >
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${selectedStaffId === s.id ? 'bg-cyan-500 text-white' : (isDarkMode ? 'bg-slate-600 text-slate-300' : 'bg-slate-100 text-slate-600')}`}>
+                          {s.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div>{s.name}</div>
+                          <div className={`text-[11px] capitalize ${isDarkMode ? 'text-slate-400' : 'text-slate-400'}`}>{s.role}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           
           <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar">
             {cart.length === 0 ? (
@@ -395,16 +459,19 @@ export default function POS() {
               </div>
             ) : (
               cart.map(item => (
-                <div key={item.id} className={`border rounded-lg p-3.5 ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+                <div key={item.cartKey} className={`border rounded-lg p-3.5 ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
                   <div className="flex justify-between items-start mb-2">
-                    <h4 className={`font-bold text-[13px] pr-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{item.name}</h4>
+                    <div className="flex items-center gap-1.5 pr-2 min-w-0">
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${item.kotType === 'BOT' ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDarkMode ? 'bg-cyan-900/50 text-cyan-300' : 'bg-cyan-100 text-cyan-700')}`}>{item.kotType}</span>
+                      <h4 className={`font-bold text-[13px] truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{item.name}</h4>
+                    </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className={isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-black'}><Minus size={14} /></button>
+                        <button onClick={() => updateQuantity(item.cartKey, item.quantity - 1)} className={isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-black'}><Minus size={14} /></button>
                         <span className="font-bold text-[13px] w-4 text-center">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className={isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-black'}><Plus size={14} /></button>
+                        <button onClick={() => updateQuantity(item.cartKey, item.quantity + 1)} className={isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-black'}><Plus size={14} /></button>
                       </div>
-                      <button onClick={() => removeFromCart(item.id)} className={`ml-1 ${isDarkMode ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'}`}><Trash2 size={14} /></button>
+                      <button onClick={() => removeFromCart(item.cartKey)} className={`ml-1 ${isDarkMode ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'}`}><Trash2 size={14} /></button>
                     </div>
                   </div>
                   <p className={`text-[13px] ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{item.price.toFixed(2)} &times; {item.quantity}</p>
@@ -421,10 +488,12 @@ export default function POS() {
                 <span>Subtotal</span>
                 <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{subtotal.toFixed(2)}</span>
               </div>
-              <div className={`flex justify-between text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                <span>Service Charge (10%)</span>
-                <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{tax.toFixed(2)}</span>
-              </div>
+              {tax > 0 && (
+                <div className={`flex justify-between text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <span>Service Charge (10%)</span>
+                  <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{tax.toFixed(2)}</span>
+                </div>
+              )}
               {discount > 0 && (
                 <div className="flex justify-between text-emerald-500 text-sm">
                   <span>Discount</span>
@@ -448,6 +517,7 @@ export default function POS() {
                     // Reset KOT Bills modal so it doesn't bleed through
                     setShowKOTBillsModal(false);
                     setSelectedKOTOrder(null);
+                    setKotTicketStep(cart.some(i => i.kotType === 'KOT') ? 'KOT' : 'BOT');
                     setShowKOTModal(true);
                   }
                 } else {
@@ -546,15 +616,18 @@ export default function POS() {
                       <label className="block text-sm font-medium text-slate-700 mb-2">Cart - use - for reduce on table (-1, -2...)</label>
                       <div className="space-y-2">
                         {cart.map(item => (
-                          <div key={item.id} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
-                            <span className="text-sm font-medium">{item.name}</span>
+                          <div key={item.cartKey} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${item.kotType === 'BOT' ? 'bg-amber-100 text-amber-700' : 'bg-cyan-100 text-cyan-700'}`}>{item.kotType}</span>
+                              <span className="text-sm font-medium">{item.name}</span>
+                            </div>
                             <div className="flex items-center gap-3">
                               <div className="flex items-center gap-2 border border-slate-200 rounded-lg p-1">
-                                <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-100 rounded"><Minus size={14} /></button>
+                                <button onClick={() => updateQuantity(item.cartKey, item.quantity - 1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-100 rounded"><Minus size={14} /></button>
                                 <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
-                                <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-100 rounded"><Plus size={14} /></button>
+                                <button onClick={() => updateQuantity(item.cartKey, item.quantity + 1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-100 rounded"><Plus size={14} /></button>
                               </div>
-                              <button onClick={() => removeFromCart(item.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                              <button onClick={() => removeFromCart(item.cartKey)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
                             </div>
                           </div>
                         ))}
@@ -682,6 +755,7 @@ export default function POS() {
                     setShowKOTBillsModal(false);
                     setSelectedKOTOrder(null);
                     setShowDeliveryModal(false);
+                    setKotTicketStep(cart.some(i => i.kotType === 'KOT') ? 'KOT' : 'BOT');
                     setShowKOTModal(true);
                   }
                 }}
@@ -700,7 +774,7 @@ export default function POS() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:bg-transparent print:backdrop-blur-none print:p-0">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] print:shadow-none print:w-auto print:max-w-none">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center print:hidden">
-              <h2 className="text-lg font-bold text-slate-800">KOT - {currentOrderNumber}</h2>
+              <h2 className="text-lg font-bold text-slate-800">{kotTicketStep} - {currentOrderNumber}</h2>
               <button onClick={() => { setShowKOTModal(false); }} className="text-slate-400 hover:text-slate-600">
                 <X size={24} />
               </button>
@@ -711,7 +785,7 @@ export default function POS() {
               <div id="kot-receipt" className="bg-white shadow-md print:shadow-none print:w-full mx-auto" style={{ width: '80mm', maxWidth: '100%', fontFamily: 'Arial, sans-serif', fontSize: '13px', padding: '20px' }}>
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '22px', letterSpacing: '4px', marginBottom: '4px' }}>KOT</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '22px', letterSpacing: '4px', marginBottom: '4px' }}>{kotTicketStep}</div>
                   <div style={{ fontSize: '13px' }}>The Tranquil Restaurant</div>
                 </div>
                 <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
@@ -719,7 +793,7 @@ export default function POS() {
                 <div style={{ marginBottom: '8px', lineHeight: '1.6' }}>
                   <div>Order No: {currentOrderNumber}</div>
                   <div>{new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '')}</div>
-                  <div>Staff: {user?.name || 'Admin'}</div>
+                  <div>Staff: {selectedStaffName || user?.name || 'Admin'}</div>
                   {deliveryMethod === 'dine_in' && <div>Table: {tableNo}</div>}
                   {deliveryMethod === 'dine_in' && pax && <div>Pax: {pax}</div>}
                   {deliveryMethod === 'room_service' && <div>Room: {roomNo}</div>}
@@ -738,107 +812,88 @@ export default function POS() {
                   {(() => {
                     const isEditing = !!activeOrderId && originalOrderItems.length > 0;
 
-                    if (!isEditing) {
-                      // New order — show all cart items
-                      return cart.map(item => (
-                        <div key={item.id} style={{ marginBottom: '8px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                            <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
-                            <span style={{ fontSize: '15px' }}>{item.quantity}</span>
-                          </div>
-                          <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
-                          {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
+                    const renderRow = (key: string, code: string, name: string, qty: React.ReactNode, note?: string, extra?: string) => (
+                      <div key={key} style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                          <span>{code}</span>
+                          <span style={{ fontSize: '15px' }}>{qty}</span>
                         </div>
-                      ));
+                        <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{name}</div>
+                        {note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {note}</div>}
+                        {extra && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>{extra}</div>}
+                      </div>
+                    );
+
+                    const renderSection = (label: string, rows: React.ReactNode[], isFirst: boolean) =>
+                      rows.length === 0 ? null : (
+                        <>
+                          {!isFirst && <div style={{ borderBottom: '1px dashed #000', margin: '8px 0' }}></div>}
+                          <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', letterSpacing: '3px', padding: '3px 0' }}>{label}</div>
+                          <div style={{ borderBottom: '1px dashed #000', margin: '4px 0 8px' }}></div>
+                          {rows}
+                        </>
+                      );
+
+                    const kotRows: React.ReactNode[] = [];
+                    const botRows: React.ReactNode[] = [];
+
+                    if (!isEditing) {
+                      cart.filter(i => i.kotType !== 'BOT').forEach(item =>
+                        kotRows.push(renderRow(item.cartKey, item.code || item.id.slice(0,4).toUpperCase(), item.name, item.quantity, item.note))
+                      );
+                      cart.filter(i => i.kotType === 'BOT').forEach(item =>
+                        botRows.push(renderRow(item.cartKey, item.code || item.id.slice(0,4).toUpperCase(), item.name, item.quantity, item.note))
+                      );
+                    } else {
+                      const kotAdded: React.ReactNode[] = [];
+                      const kotRemoved: React.ReactNode[] = [];
+                      const botAdded: React.ReactNode[] = [];
+                      const botRemoved: React.ReactNode[] = [];
+
+                      cart.forEach(item => {
+                        const orig = originalOrderItems.find((o: any) => o.product_id === item.id);
+                        const added = item.kotType === 'BOT' ? botAdded : kotAdded;
+                        const removed = item.kotType === 'BOT' ? botRemoved : kotRemoved;
+                        if (!orig) {
+                          added.push(renderRow(item.cartKey, item.code || item.id.slice(0,4).toUpperCase(), item.name, item.quantity, item.note));
+                        } else if (item.quantity > orig.quantity) {
+                          added.push(renderRow(item.cartKey, item.code || item.id.slice(0,4).toUpperCase(), item.name, `+${item.quantity - orig.quantity}`, item.note));
+                        } else if (item.quantity < orig.quantity) {
+                          removed.push(renderRow(item.cartKey, item.code || item.id.slice(0,4).toUpperCase(), item.name, `-${orig.quantity - item.quantity}`, undefined, '** Reduce Qty **'));
+                        }
+                      });
+
+                      originalOrderItems.forEach((orig: any) => {
+                        if (!cart.some(item => item.id === orig.product_id)) {
+                          kotRemoved.push(renderRow(orig.product_id, orig.code || orig.product_id?.slice(0,4).toUpperCase(), orig.product_name, `-${orig.quantity}`, undefined, '** Remove This Item **'));
+                        }
+                      });
+
+                      const hasChanges = kotAdded.length > 0 || kotRemoved.length > 0 || botAdded.length > 0 || botRemoved.length > 0;
+                      if (!hasChanges) {
+                        // No diff — reprint all
+                        cart.filter(i => i.kotType !== 'BOT').forEach(item =>
+                          kotRows.push(renderRow(item.cartKey, item.code || item.id.slice(0,4).toUpperCase(), item.name, item.quantity, item.note))
+                        );
+                        cart.filter(i => i.kotType === 'BOT').forEach(item =>
+                          botRows.push(renderRow(item.cartKey, item.code || item.id.slice(0,4).toUpperCase(), item.name, item.quantity, item.note))
+                        );
+                      } else {
+                        kotRows.push(...kotAdded);
+                        if (kotRemoved.length > 0) {
+                          if (kotAdded.length > 0) kotRows.push(<div key="kot-div" style={{ borderBottom: '1px dashed #000', margin: '8px 0' }}></div>);
+                          kotRows.push(...kotRemoved);
+                        }
+                        botRows.push(...botAdded);
+                        if (botRemoved.length > 0) {
+                          if (botAdded.length > 0) botRows.push(<div key="bot-div" style={{ borderBottom: '1px dashed #000', margin: '8px 0' }}></div>);
+                          botRows.push(...botRemoved);
+                        }
+                      }
                     }
 
-                    // Updating existing order — show only changes
-                    const addedItems: React.ReactNode[] = [];
-                    const removedLines: React.ReactNode[] = [];
-
-                    cart.forEach(item => {
-                      const orig = originalOrderItems.find((o: any) => o.product_id === item.id);
-                      if (!orig) {
-                        // Brand new item
-                        addedItems.push(
-                          <div key={item.id} style={{ marginBottom: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                              <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
-                              <span style={{ fontSize: '15px' }}>{item.quantity}</span>
-                            </div>
-                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
-                            {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
-                          </div>
-                        );
-                      } else if (item.quantity > orig.quantity) {
-                        // Quantity increased — show only the additional qty
-                        const diff = item.quantity - orig.quantity;
-                        addedItems.push(
-                          <div key={item.id} style={{ marginBottom: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                              <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
-                              <span style={{ fontSize: '15px' }}>+{diff}</span>
-                            </div>
-                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
-                            {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
-                          </div>
-                        );
-                      } else if (item.quantity < orig.quantity) {
-                        // Quantity decreased
-                        const diff = orig.quantity - item.quantity;
-                        removedLines.push(
-                          <div key={item.id} style={{ marginBottom: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                              <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
-                              <span style={{ fontSize: '15px' }}>-{diff}</span>
-                            </div>
-                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
-                            <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>** Reduce Qty **</div>
-                          </div>
-                        );
-                      }
-                    });
-
-                    // Items fully removed from cart
-                    originalOrderItems.forEach((orig: any) => {
-                      if (!cart.some(item => item.id === orig.product_id)) {
-                        removedLines.push(
-                          <div key={orig.product_id} style={{ marginBottom: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                              <span>{orig.code || orig.product_id?.slice(0,4).toUpperCase()}</span>
-                              <span style={{ fontSize: '15px' }}>-{orig.quantity}</span>
-                            </div>
-                            <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{orig.product_name}</div>
-                            <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>** Remove This Item **</div>
-                          </div>
-                        );
-                      }
-                    });
-
-                    return (
-                      <>
-                        {addedItems}
-                        {removedLines.length > 0 && (
-                          <>
-                            {addedItems.length > 0 && <div style={{ borderBottom: '1px dashed #000', margin: '8px 0' }}></div>}
-                            {removedLines}
-                          </>
-                        )}
-                        {addedItems.length === 0 && removedLines.length === 0 && (
-                          // No diff — show all items as a reprint so the KOT is never blank
-                          cart.map(item => (
-                            <div key={item.id} style={{ marginBottom: '8px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                                <span>{item.code || item.id.slice(0,4).toUpperCase()}</span>
-                                <span style={{ fontSize: '15px' }}>{item.quantity}</span>
-                              </div>
-                              <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.name}</div>
-                              {item.note && <div style={{ fontSize: '12px', fontStyle: 'italic', paddingLeft: '8px' }}>Note: {item.note}</div>}
-                            </div>
-                          ))
-                        )}
-                      </>
-                    );
+                    const rows = kotTicketStep === 'KOT' ? kotRows : botRows;
+                    return <>{rows}</>;
                   })()}
                 </div>
                 <div style={{ borderBottom: '1px dashed #000', marginBottom: '4px' }}></div>
@@ -857,12 +912,21 @@ export default function POS() {
                 >
                   Print
                 </button>
-                <button
-                  onClick={() => { setShowKOTModal(false); }}
-                  className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
-                >
-                  Close
-                </button>
+                {kotTicketStep === 'KOT' && cart.some(i => i.kotType === 'BOT') ? (
+                  <button
+                    onClick={() => { setKotTicketStep('BOT'); }}
+                    className="flex-1 sm:flex-none px-6 py-2.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors"
+                  >
+                    Next → BOT
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setShowKOTModal(false); }}
+                    className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                )}
               </div>
             </div>
           </div>

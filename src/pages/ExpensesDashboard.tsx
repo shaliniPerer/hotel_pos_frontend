@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp, Menu as MenuIcon, Search, Download, FileText, X,
+  TrendingUp, Menu as MenuIcon, Search, Download, FileText, X, Receipt,
 } from 'lucide-react';
 import AppSidebar from '../components/AppSidebar';
 
@@ -201,9 +201,18 @@ export default function ExpensesDashboard() {
               <h2 className="text-lg font-bold text-slate-800 leading-tight">Expense Report</h2>
             </div>
           </div>
-          <p className="ml-auto text-xs text-slate-400 hidden sm:block">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
+          <div className="ml-auto flex items-center gap-3">
+            <p className="text-xs text-slate-400 hidden sm:block">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+            <button
+              onClick={() => navigate('/expenses')}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Receipt size={16} />
+              <span className="hidden sm:inline">Go to Expenses</span>
+            </button>
+          </div>
         </header>
 
         {/* Main */}

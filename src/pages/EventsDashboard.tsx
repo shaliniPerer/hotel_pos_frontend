@@ -38,8 +38,15 @@ interface EventBooking {
 function printBookingPDF(booking: EventBooking) {
   const win = window.open('', '_blank', 'width=800,height=700');
   if (!win) return;
+
+  const _now = new Date();
+  const _pad = (n: number) => String(n).padStart(2, '0');
+  const _hh = _now.getHours(); const _ampm = _hh >= 12 ? 'PM' : 'AM'; const _h12 = _hh % 12 || 12;
+  const genTime = `${_pad(_now.getDate())}/${_pad(_now.getMonth()+1)}/${_now.getFullYear()} ${_pad(_h12)}.${_pad(_now.getMinutes())} ${_ampm}`;
+
   const itemRows = booking.items
-    .map(it => `<tr>
+    .map((it, idx) => `<tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${idx+1}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #eee;">${it.name}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${it.quantity}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${it.price.toFixed(2)}</td>
@@ -57,11 +64,13 @@ function printBookingPDF(booking: EventBooking) {
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:Arial,sans-serif;font-size:13px;color:#1e293b;padding:32px;}
-    .header{text-align:center;margin-bottom:24px;border-bottom:2px solid #7c3aed;padding-bottom:16px;}
-    .header h1{font-size:22px;font-weight:700;color:#7c3aed;}
-    .header p{color:#64748b;font-size:12px;margin-top:4px;}
+    .header{text-align:center;margin-bottom:24px;border-bottom:3px solid #0891b2;padding-bottom:16px;}
+    .biz-name{font-size:22px;font-weight:700;color:#0f172a;}
+    .biz-info{font-size:11px;color:#475569;margin-top:3px;}
+    .report-title{font-size:16px;font-weight:700;color:#0891b2;margin-top:10px;}
+    .sub{font-size:11px;color:#64748b;margin-top:4px;}
     .section{margin-bottom:18px;}
-    .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7c3aed;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}
+    .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
     .field label{font-size:10px;color:#94a3b8;display:block;margin-bottom:2px;}
     .field span{font-size:13px;font-weight:600;}
@@ -70,12 +79,18 @@ function printBookingPDF(booking: EventBooking) {
     thead th{padding:8px;text-align:left;font-size:11px;color:#64748b;font-weight:600;border-bottom:2px solid #e2e8f0;}
     .totals{margin-top:12px;}
     .total-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;}
-    .total-row.grand{font-size:15px;font-weight:700;border-top:2px solid #7c3aed;padding-top:8px;margin-top:4px;}
+    .total-row.grand{font-size:15px;font-weight:700;border-top:2px solid #0891b2;padding-top:8px;margin-top:4px;}
     .total-row.balance{color:#dc2626;}
     .footer{margin-top:32px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:16px;}
   </style>
   </head><body>
-  <div class="header"><h1>HotelMate POS</h1><p>Event Booking Confirmation</p></div>
+  <div class="header">
+    <div class="biz-name">The Tranquil</div>
+    <div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div>
+    <div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div>
+    <div class="report-title">Event Booking Confirmation</div>
+    <div class="sub">Generated: ${genTime}</div>
+  </div>
   <div class="section"><div class="section-title">Customer Information</div>
     <div class="grid2">
       <div class="field"><label>Customer Name</label><span>${booking.customer_name}</span></div>
@@ -92,22 +107,22 @@ function printBookingPDF(booking: EventBooking) {
     ${booking.notes ? `<div class="field" style="margin-top:8px;"><label>Notes</label><span>${booking.notes}</span></div>` : ''}
   </div>
   <div class="section"><div class="section-title">Items</div>
-    <table><thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead>
+    <table><thead><tr><th style="text-align:center;width:36px;">#</th><th>Item</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead>
     <tbody>${itemRows}</tbody></table>
     <div class="totals">
-      <div class="total-row"><span>Subtotal</span><span>${booking.subtotal.toFixed(2)}</span></div>
-      <div class="total-row grand"><span>Total</span><span>${booking.total.toFixed(2)}</span></div>
+      <div class="total-row"><span>Subtotal</span><span>LKR ${booking.subtotal.toFixed(2)}</span></div>
+      <div class="total-row grand"><span>Total</span><span>LKR ${booking.total.toFixed(2)}</span></div>
       <div class="total-row" style="color:#0f172a;margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;">
         <span>Payment Status</span><span>${paymentBadge}</span>
       </div>
       ${booking.payment_status !== 'full' ? `
-      <div class="total-row"><span>Advance Payment</span><span>${booking.advance_payment.toFixed(2)}</span></div>
-      <div class="total-row balance"><span>Balance Due</span><span>${booking.balance.toFixed(2)}</span></div>
+      <div class="total-row"><span>Advance Payment</span><span>LKR ${booking.advance_payment.toFixed(2)}</span></div>
+      <div class="total-row balance"><span>Balance Due</span><span>LKR ${booking.balance.toFixed(2)}</span></div>
       ` : ''}
       <div class="total-row"><span>Payment Method</span><span style="text-transform:capitalize;">${(booking.payment_method || '—').replace('_',' ')}</span></div>
     </div>
   </div>
-  <div class="footer">Thank you for choosing HotelMate. We look forward to making your event special!</div>
+  <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0891b2;text-decoration:underline;">https://clickinmo.com</a></div>
   </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
@@ -184,7 +199,12 @@ export default function EventsDashboard() {
   const downloadPDF = () => {
     const win = window.open('', '_blank', 'width=1000,height=750');
     if (!win) return;
-    const rows = filtered.map(b => `<tr>
+    const _now = new Date();
+    const _pad = (n: number) => String(n).padStart(2, '0');
+    const _hh = _now.getHours(); const _ampm = _hh >= 12 ? 'PM' : 'AM'; const _h12 = _hh % 12 || 12;
+    const genTime = `${_pad(_now.getDate())}/${_pad(_now.getMonth()+1)}/${_now.getFullYear()} ${_pad(_h12)}.${_pad(_now.getMinutes())} ${_ampm}`;
+    const rows = filtered.map((b, i) => `<tr>
+      <td style="text-align:center">${i+1}</td>
       <td>${b.customer_name}</td>
       <td>${b.customer_phone}</td>
       <td>${b.event_date} ${b.event_time}</td>
@@ -196,27 +216,36 @@ export default function EventsDashboard() {
     </tr>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Event Bookings Report</title><style>
       body{font-family:Arial,sans-serif;padding:24px;color:#1e293b;font-size:12px;}
-      .header{text-align:center;border-bottom:3px solid #7c3aed;padding-bottom:16px;margin-bottom:20px;}
-      .title{font-size:22px;font-weight:700;color:#7c3aed;}.sub{font-size:12px;color:#64748b;margin-top:3px;}
+      .header{text-align:center;border-bottom:3px solid #0891b2;padding-bottom:16px;margin-bottom:20px;}
+      .biz-name{font-size:22px;font-weight:700;color:#0f172a;}
+      .biz-info{font-size:11px;color:#475569;margin-top:3px;}
+      .report-title{font-size:16px;font-weight:700;color:#0891b2;margin-top:8px;}
+      .sub{font-size:11px;color:#64748b;margin-top:3px;}
       .summary{display:flex;gap:12px;margin-bottom:16px;}
       .card{flex:1;border-radius:8px;padding:10px 14px;}
       table{width:100%;border-collapse:collapse;}
-      th{background:#7c3aed;color:white;padding:8px 10px;text-align:left;font-size:11px;}
+      th{background:#0891b2;color:white;padding:8px 10px;text-align:left;font-size:11px;}
       td{padding:7px 10px;border-bottom:1px solid #f1f5f9;}
       .badge{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;}
       .badge.upcoming{background:#ede9fe;color:#6d28d9;}.badge.completed{background:#d1fae5;color:#065f46;}.badge.void{background:#fee2e2;color:#991b1b;}
       .footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;}
     </style></head><body>
-    <div class="header"><div class="title">HotelMate POS</div><div class="sub">Event Bookings Dashboard Report</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
+    <div class="header">
+      <div class="biz-name">The Tranquil</div>
+      <div class="biz-info">No.194 / 1, Makola South, Makola, Sri Lanka</div>
+      <div class="biz-info">+94 11 2 965 888 / +94 77 5 072 909</div>
+      <div class="report-title">Event Bookings Report</div>
+      <div class="sub">Generated: ${genTime}</div>
+    </div>
     <div class="summary">
       <div class="card" style="background:#f5f3ff;border:1px solid #ddd6fe"><div style="font-size:10px;color:#7c3aed;font-weight:700;text-transform:uppercase">Upcoming</div><div style="font-size:18px;font-weight:700;color:#6d28d9">${upcoming.length}</div></div>
       <div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0"><div style="font-size:10px;color:#16a34a;font-weight:700;text-transform:uppercase">Revenue</div><div style="font-size:18px;font-weight:700;color:#15803d">LKR ${totalRevenue.toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
       <div class="card" style="background:#f0f9ff;border:1px solid #bae6fd"><div style="font-size:10px;color:#0284c7;font-weight:700;text-transform:uppercase">Advance Collected</div><div style="font-size:18px;font-weight:700;color:#0369a1">LKR ${advanceTotal.toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
       <div class="card" style="background:#fffbeb;border:1px solid #fde68a"><div style="font-size:10px;color:#d97706;font-weight:700;text-transform:uppercase">Balance Pending</div><div style="font-size:18px;font-weight:700;color:#b45309">LKR ${balancePending.toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
     </div>
-    <table><thead><tr><th>Customer</th><th>Phone</th><th>Date &amp; Time</th><th>Function</th><th>PAX</th><th>Total</th><th>Balance</th><th>Status</th></tr></thead>
+    <table><thead><tr><th style="text-align:center;width:36px">#</th><th>Customer</th><th>Phone</th><th>Date &amp; Time</th><th>Function</th><th>PAX</th><th>Total</th><th>Balance</th><th>Status</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <div class="footer">HotelMate POS — Event Bookings — ${filtered.length} records</div>
+    <div class="footer">Digital Solutions by Click Inmo Pvt Ltd.<br><a href="https://clickinmo.com" target="_blank" style="color:#0891b2;text-decoration:underline;">https://clickinmo.com</a></div>
     </body></html>`);
     win.document.close();
     setTimeout(() => win.print(), 400);
@@ -241,9 +270,18 @@ export default function EventsDashboard() {
               <h2 className="text-lg font-bold text-slate-800 leading-tight">Event Dashboard</h2>
             </div>
           </div>
-          <p className="ml-auto text-xs text-slate-400 hidden sm:block">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
+          <div className="ml-auto flex items-center gap-3">
+            <p className="text-xs text-slate-400 hidden sm:block">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+            <button
+              onClick={() => navigate('/events')}
+              className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <CalendarDays size={16} />
+              <span className="hidden sm:inline">Go to Events</span>
+            </button>
+          </div>
         </header>
 
         {/* Main */}

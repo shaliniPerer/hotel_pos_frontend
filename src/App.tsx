@@ -14,6 +14,7 @@ import Expenses from './pages/Expenses';
 import Reports from './pages/Reports';
 import EventsDashboard from './pages/EventsDashboard';
 import ExpensesDashboard from './pages/ExpensesDashboard';
+import UsersPage from './pages/Users';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useStore } from './store';
 
@@ -89,6 +90,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ExpensesDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute>
+              <UsersPage />
             </ProtectedRoute>
           }
         />
