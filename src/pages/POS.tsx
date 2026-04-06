@@ -506,7 +506,7 @@ export default function POS() {
               </div>
             </div>
             <button 
-              disabled={cart.length === 0 || isSavingOrder} 
+              disabled={cart.length === 0 || isSavingOrder || !selectedStaffId} 
               onClick={async () => {
                 if (activeOrderId) {
                   // Editing existing order — skip delivery modal, save & show KOT directly
