@@ -28,7 +28,8 @@ export default function POS() {
     user, token, categories, products, cart, orderType, orderReference, discount, activeOrderId,
     fetchCategories, fetchProducts, fetchOrders, initSocket, addToCart, removeFromCart, updateQuantity,
     updateCartItemNote, clearCart, setOrderType, setDiscount, logout, setActiveOrderId, apiFetch, orders,
-    staffUsers, selectedStaffId, selectedStaffName, fetchStaffUsers, setSelectedStaff
+    staffUsers, selectedStaffId, selectedStaffName, fetchStaffUsers, setSelectedStaff,
+    cartStaffId, cartStaffName
   } = useStore();
   
   const navigate = useNavigate();
@@ -56,6 +57,11 @@ export default function POS() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showKOTBillsModal, setShowKOTBillsModal] = useState(false);
   const [selectedKOTOrder, setSelectedKOTOrder] = useState<any | null>(null);
+  const [kotSearchQuery, setKotSearchQuery] = useState('');
+  type KotDateRange = 'all' | 'today' | 'week' | 'month' | 'custom';
+  const [kotDateRange, setKotDateRange] = useState<KotDateRange>('all');
+  const [kotCustomFrom, setKotCustomFrom] = useState('');
+  const [kotCustomTo, setKotCustomTo] = useState('');
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
@@ -160,7 +166,7 @@ export default function POS() {
         body: JSON.stringify({
           type: orderType,
           reference: orderReference,
-          items: cart.map(item => ({ product_id: item.id, product_name: item.name, quantity: item.quantity, price: item.price })),
+          items: cart.map(item => ({ product_id: item.id, product_name: item.name, quantity: item.quantity, price: item.price, kot_type: item.kotType })),
           subtotal,
           tax,
           discount,
@@ -168,7 +174,7 @@ export default function POS() {
           payment_method: paymentMethod,
           paid_amount: paymentMethod === 'cash' && paidAmount ? parseFloat(paidAmount) : total,
           status: 'completed',
-          ...(selectedStaffId ? { staff_id: selectedStaffId, staff_name: selectedStaffName } : {}),
+          ...(() => { const sid = cartStaffId || selectedStaffId; const sname = cartStaffName || selectedStaffName; return sid ? { staff_id: sid, staff_name: sname } : {}; })(),
         })
       });
 
@@ -204,14 +210,14 @@ export default function POS() {
         body: JSON.stringify({
           type,
           reference,
-          items: cart.map(item => ({ product_id: item.id, product_name: item.name, quantity: item.quantity, price: item.price })),
+          items: cart.map(item => ({ product_id: item.id, product_name: item.name, quantity: item.quantity, price: item.price, kot_type: item.kotType })),
           subtotal,
           tax,
           discount,
           total,
           payment_method: paymentMethod,
           status: 'active',
-          ...(selectedStaffId ? { staff_id: selectedStaffId, staff_name: selectedStaffName } : {}),
+          ...(() => { const sid = cartStaffId || selectedStaffId; const sname = cartStaffName || selectedStaffName; return sid ? { staff_id: sid, staff_name: sname } : {}; })(),
         })
       });
 
@@ -934,154 +940,274 @@ export default function POS() {
       )}
 
       {/* KOT Bills Modal */}
-      {showKOTBillsModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Header */}
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                {selectedKOTOrder && (
-                  <button onClick={() => setSelectedKOTOrder(null)} className="text-slate-400 hover:text-slate-700">
-                    <ChevronLeft size={22} />
-                  </button>
-                )}
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    {selectedKOTOrder ? `KOT — ${selectedKOTOrder.order_number}` : 'KOT Bills'}
-                  </h2>
-                  {!selectedKOTOrder && <p className="text-sm text-slate-500 mt-0.5">All kitchen order tickets</p>}
+      {showKOTBillsModal && (() => {
+        // Filter orders for the list
+        const kotFilteredOrders = [...orders]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .filter(o => {
+            if (kotSearchQuery.trim()) {
+              const q = kotSearchQuery.trim().toLowerCase();
+              if (
+                !o.order_number?.toLowerCase().includes(q) &&
+                !(o.reference || '').toLowerCase().includes(q) &&
+                !o.id?.toLowerCase().includes(q)
+              ) return false;
+            }
+            if (kotDateRange !== 'all') {
+              const orderDate = new Date(o.created_at);
+              const now = new Date();
+              if (kotDateRange === 'today') {
+                const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                if (orderDate < start) return false;
+              } else if (kotDateRange === 'week') {
+                const start = new Date(now); start.setDate(now.getDate() - 6); start.setHours(0, 0, 0, 0);
+                if (orderDate < start) return false;
+              } else if (kotDateRange === 'month') {
+                const start = new Date(now.getFullYear(), now.getMonth(), 1);
+                if (orderDate < start) return false;
+              } else if (kotDateRange === 'custom') {
+                if (kotCustomFrom) { const from = new Date(kotCustomFrom); from.setHours(0,0,0,0); if (orderDate < from) return false; }
+                if (kotCustomTo) { const to = new Date(kotCustomTo); to.setHours(23,59,59,999); if (orderDate > to) return false; }
+              }
+            }
+            return true;
+          });
+
+        const statusColor: Record<string, string> = {
+          active: 'bg-green-100 text-green-700',
+          completed: 'bg-blue-100 text-blue-700',
+          void: 'bg-red-100 text-red-700',
+        };
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  {selectedKOTOrder && (
+                    <button onClick={() => setSelectedKOTOrder(null)} className="text-slate-400 hover:text-slate-700">
+                      <ChevronLeft size={22} />
+                    </button>
+                  )}
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      {selectedKOTOrder ? `Order Details — #${selectedKOTOrder.order_number}` : 'Order Details'}
+                    </h2>
+                    {!selectedKOTOrder && <p className="text-sm text-slate-500 mt-0.5">KOT / BOT history for all orders</p>}
+                  </div>
                 </div>
+                <button onClick={() => { setShowKOTBillsModal(false); setSelectedKOTOrder(null); setKotSearchQuery(''); setKotDateRange('all'); }} className="text-slate-400 hover:text-slate-600">
+                  <X size={24} />
+                </button>
               </div>
-              <button onClick={() => { setShowKOTBillsModal(false); setSelectedKOTOrder(null); }} className="text-slate-400 hover:text-slate-600">
-                <X size={24} />
-              </button>
-            </div>
 
-            {/* Body — list view */}
-            {!selectedKOTOrder && (
-              <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
-                {orders.length === 0 ? (
-                  <div className="text-center py-16 text-slate-500">No KOT bills found</div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {[...orders]
-                      .filter(o => o.status === 'active')
-                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                      .map(order => {
-                        const typeLabel: Record<string, string> = {
-                          table: 'Dine-In', room: 'Room', takeaway: 'Takeaway', delivery: 'Delivery'
-                        };
-                        const refLabel: Record<string, string> = {
-                          table: 'Table', room: 'Room', takeaway: 'Takeaway', delivery: 'Delivery'
-                        };
-                        const statusColor: Record<string, string> = {
-                          active: 'bg-green-100 text-green-700',
-                          completed: 'bg-blue-100 text-blue-700',
-                          void: 'bg-red-100 text-red-700',
-                        };
-                        const dateStr = new Date(order.created_at).toLocaleString('en-GB', {
-                          day: '2-digit', month: '2-digit', year: 'numeric',
-                          hour: '2-digit', minute: '2-digit'
-                        }).replace(',', '');
-                        return (
-                          <div
-                            key={order.id}
-                            onClick={() => setSelectedKOTOrder(order)}
-                            className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col gap-1.5 shadow-sm cursor-pointer hover:border-slate-400 hover:shadow-md transition-all"
-                          >
-                            <div className="text-base font-bold text-slate-900 tracking-wide">{order.order_number}</div>
-                            <div className="text-xs text-slate-500">{dateStr}</div>
-                            <div className="text-xs font-semibold text-slate-800">
-                              {typeLabel[order.type] || order.type}
-                              {order.reference ? ` · ${refLabel[order.type] || ''} ${order.reference}`.trim() : ''}
-                            </div>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full self-start ${statusColor[order.status] || 'bg-slate-100 text-slate-600'}`}>
-                              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Body — KOT bill detail view */}
-            {selectedKOTOrder && (
-              <div className="p-6 bg-slate-100 overflow-y-auto custom-scrollbar flex-1 flex justify-center items-start">
-                <div id="kot-bills-receipt" className="bg-white shadow-md print:shadow-none print:w-full mx-auto" style={{ width: '80mm', maxWidth: '100%', fontFamily: 'Arial, sans-serif', fontSize: '13px', padding: '20px' }}>
-                  {/* Header */}
-                  <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '22px', letterSpacing: '4px', marginBottom: '4px' }}>KOT</div>
-                    <div style={{ fontSize: '13px' }}>The Tranquil Restaurant</div>
-                  </div>
-                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
-                  {/* Order info */}
-                  <div style={{ marginBottom: '8px', lineHeight: '1.6' }}>
-                    <div>Order No: {selectedKOTOrder.order_number}</div>
-                    <div>{new Date(selectedKOTOrder.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '')}</div>
-                    {selectedKOTOrder.type === 'table' && <div>Table: {selectedKOTOrder.reference}</div>}
-                    {selectedKOTOrder.type === 'room' && <div>Room: {selectedKOTOrder.reference}</div>}
-                    {selectedKOTOrder.type === 'takeaway' && <div>Takeaway: {selectedKOTOrder.reference}</div>}
-                    {selectedKOTOrder.type === 'delivery' && <div>Delivery: {selectedKOTOrder.reference}</div>}
-                  </div>
-                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
-                  {/* Column headers */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', marginBottom: '6px' }}>
-                    <span>ITEM</span>
-                    <span>QTY</span>
-                  </div>
-                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '8px' }}></div>
-                  {/* Items */}
-                  <div style={{ marginBottom: '10px' }}>
-                    {(selectedKOTOrder.items || []).map((item: any) => (
-                      <div key={item.id} style={{ marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                          <span>{item.product_id?.slice(0, 4).toUpperCase()}</span>
-                          <span style={{ fontSize: '15px' }}>{item.quantity}</span>
-                        </div>
-                        <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{item.product_name}</div>
+              {/* Body — list view */}
+              {!selectedKOTOrder && (
+                <div className="flex flex-col flex-1 overflow-hidden">
+                  {/* Search & date filter */}
+                  <div className="px-5 pt-4 pb-2 space-y-3">
+                    <div className="relative">
+                      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={kotSearchQuery}
+                        onChange={e => setKotSearchQuery(e.target.value)}
+                        placeholder="Search by order number or reference…"
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-300 bg-slate-50"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(['all', 'today', 'week', 'month', 'custom'] as const).map(range => (
+                        <button
+                          key={range}
+                          onClick={() => setKotDateRange(range)}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                            kotDateRange === range ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {range === 'all' ? 'All' : range === 'today' ? 'Today' : range === 'week' ? 'This Week' : range === 'month' ? 'This Month' : 'Custom'}
+                        </button>
+                      ))}
+                    </div>
+                    {kotDateRange === 'custom' && (
+                      <div className="flex items-center gap-2">
+                        <input type="date" value={kotCustomFrom} onChange={e => setKotCustomFrom(e.target.value)} className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white" />
+                        <span className="text-slate-400 text-sm">—</span>
+                        <input type="date" value={kotCustomTo} onChange={e => setKotCustomTo(e.target.value)} className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white" />
                       </div>
-                    ))}
-                    {(!selectedKOTOrder.items || selectedKOTOrder.items.length === 0) && (
-                      <div style={{ textAlign: 'center', color: '#666' }}>No items</div>
                     )}
                   </div>
-                  <div style={{ borderBottom: '1px dashed #000', marginBottom: '4px' }}></div>
-                  <div style={{ borderBottom: '1px dashed #000' }}></div>
-                </div>
-              </div>
-            )}
 
-            {/* Footer */}
-            <div className="p-4 border-t border-slate-100 flex justify-between items-center bg-white">
-              {selectedKOTOrder ? (
-                <>
-                  <button
-                    onClick={() => setSelectedKOTOrder(null)}
-                    className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
-                  >
+                  {/* Orders grid */}
+                  <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
+                    {kotFilteredOrders.length === 0 ? (
+                      <div className="text-center py-16 text-slate-500">No orders found</div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {kotFilteredOrders.map(order => {
+                          const typeLabel: Record<string, string> = { table: 'Dine-In', room: 'Room', takeaway: 'Takeaway', delivery: 'Delivery' };
+                          const dateStr = new Date(order.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+                          const eventsCount = (order.events || []).length;
+                          return (
+                            <div
+                              key={order.id}
+                              onClick={() => setSelectedKOTOrder(order)}
+                              className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col gap-1.5 shadow-sm cursor-pointer hover:border-slate-400 hover:shadow-md transition-all"
+                            >
+                              <div className="text-base font-bold text-slate-900 tracking-wide">{order.order_number}</div>
+                              <div className="text-xs text-slate-500">{dateStr}</div>
+                              <div className="text-xs font-semibold text-slate-800">
+                                {typeLabel[order.type] || order.type}
+                                {order.reference ? ` · ${order.reference}` : ''}
+                              </div>
+                              <div className="flex items-center justify-between mt-0.5">
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor[order.status] || 'bg-slate-100 text-slate-600'}`}>
+                                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                </span>
+                                {eventsCount > 0 && (
+                                  <span className="text-xs text-slate-400">{eventsCount} event{eventsCount !== 1 ? 's' : ''}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Body — Order detail with timeline */}
+              {selectedKOTOrder && (
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+                  {/* Meta */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div className="bg-slate-50 rounded-xl p-3">
+                      <span className="text-slate-500 text-xs block mb-0.5">Type / Reference</span>
+                      <span className="font-semibold text-slate-800 text-xs leading-tight">
+                        {selectedKOTOrder.type === 'table' ? `Dine-In · Table ${selectedKOTOrder.reference || '—'}` :
+                         selectedKOTOrder.type === 'room' ? `Room · ${selectedKOTOrder.reference || '—'}` :
+                         selectedKOTOrder.type === 'takeaway' ? `Takeaway${selectedKOTOrder.reference ? ` · ${selectedKOTOrder.reference}` : ''}` :
+                         `Delivery${selectedKOTOrder.reference ? ` · ${selectedKOTOrder.reference}` : ''}`}
+                      </span>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3">
+                      <span className="text-slate-500 text-xs block mb-0.5">Staff</span>
+                      <span className="font-semibold text-slate-800 text-xs">{selectedKOTOrder.staff_name || '—'}</span>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3">
+                      <span className="text-slate-500 text-xs block mb-0.5">Status</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColor[selectedKOTOrder.status] || 'bg-slate-100 text-slate-600'}`}>
+                        {selectedKOTOrder.status}
+                      </span>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3">
+                      <span className="text-slate-500 text-xs block mb-0.5">Total</span>
+                      <span className="font-bold text-slate-900 text-xs">LKR {(selectedKOTOrder.total || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Current items */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Current Items</h4>
+                    <div className="bg-slate-50 rounded-xl overflow-hidden">
+                      <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-semibold text-slate-500 border-b border-slate-200">
+                        <div className="col-span-6">Item</div>
+                        <div className="col-span-2 text-center">Type</div>
+                        <div className="col-span-2 text-center">Qty</div>
+                        <div className="col-span-2 text-right">Price</div>
+                      </div>
+                      {(selectedKOTOrder.items || []).length === 0 ? (
+                        <div className="px-4 py-6 text-center text-sm text-slate-400">No items</div>
+                      ) : (
+                        (selectedKOTOrder.items || []).map((item: any) => (
+                          <div key={item.id} className="grid grid-cols-12 gap-2 px-4 py-2.5 text-sm items-center border-b border-slate-100 last:border-0">
+                            <div className="col-span-6 font-medium text-slate-800 truncate">{item.product_name}</div>
+                            <div className="col-span-2 text-center">
+                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${item.kot_type === 'BOT' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                {item.kot_type || 'KOT'}
+                              </span>
+                            </div>
+                            <div className="col-span-2 text-center font-semibold text-slate-700">{item.quantity}</div>
+                            <div className="col-span-2 text-right text-slate-600">{((item.price || 0) * (item.quantity || 1)).toFixed(2)}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Event timeline */}
+                  {(() => {
+                    const events: any[] = selectedKOTOrder.events || [];
+                    if (events.length === 0) {
+                      return (
+                        <div className="text-sm text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">
+                          No KOT / BOT history recorded for this order.
+                        </div>
+                      );
+                    }
+                    return (
+                      <div>
+                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Activity Timeline</h4>
+                        <div className="relative border-l-2 border-slate-200 ml-3 space-y-4">
+                          {events.map((evt: any, idx: number) => {
+                            const isKot = evt.event_type === 'KOT_SENT';
+                            const isBot = evt.event_type === 'BOT_SENT';
+                            const isRemoved = evt.event_type === 'ITEMS_REMOVED';
+                            const dotColor = isKot ? 'bg-green-500' : isBot ? 'bg-blue-500' : 'bg-red-500';
+                            const labelColor = isKot ? 'bg-green-100 text-green-700' : isBot ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700';
+                            const label = isKot ? 'KOT Sent' : isBot ? 'BOT Sent' : 'Items Removed';
+                            const timeStr = (() => {
+                              const d = new Date(evt.timestamp);
+                              return isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            })();
+                            return (
+                              <div key={idx} className="pl-6 relative">
+                                <span className={`absolute -left-2 top-1.5 w-4 h-4 rounded-full border-2 border-white ${dotColor}`}></span>
+                                <div className="bg-slate-50 rounded-xl p-3">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${labelColor}`}>{label}</span>
+                                    <span className="text-xs text-slate-400">{timeStr}</span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {(evt.items || []).map((item: any, iIdx: number) => (
+                                      <div key={iIdx} className="flex justify-between text-sm">
+                                        <span className={`truncate max-w-[70%] ${isRemoved ? 'line-through text-red-400' : 'text-slate-700'}`}>{item.product_name}</span>
+                                        <span className={`font-medium tabular-nums ${isRemoved ? 'text-red-400' : 'text-slate-700'}`}>×{item.quantity}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-100 flex justify-between items-center bg-white">
+                {selectedKOTOrder ? (
+                  <button onClick={() => setSelectedKOTOrder(null)} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors">
                     Back
                   </button>
+                ) : (
                   <button
-                    onClick={() => window.print()}
-                    className="px-6 py-2.5 bg-slate-800 text-white rounded-lg font-medium hover:bg-black transition-colors"
+                    onClick={() => { setShowKOTBillsModal(false); setSelectedKOTOrder(null); setKotSearchQuery(''); setKotDateRange('all'); }}
+                    className="ml-auto px-6 py-2.5 bg-slate-800 text-white rounded-lg font-medium hover:bg-black transition-colors"
                   >
-                    Print
+                    Close
                   </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => { setShowKOTBillsModal(false); setSelectedKOTOrder(null); }}
-                  className="ml-auto px-6 py-2.5 bg-slate-800 text-white rounded-lg font-medium hover:bg-black transition-colors"
-                >
-                  Close
-                </button>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Payment Modal */}
       {showPaymentModal && (

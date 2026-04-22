@@ -58,6 +58,7 @@ interface Order {
   cashier_id: string;
   staff_id?: string;
   staff_name?: string;
+  events?: any[];
   created_at: string;
   updated_at: string;
   items?: any[];
@@ -74,6 +75,8 @@ interface AppState {
   staffUsers: StaffUser[];
   selectedStaffId: string | null;
   selectedStaffName: string;
+  cartStaffId: string | null;
+  cartStaffName: string;
   orderType: 'table' | 'room' | 'takeaway' | 'delivery';
   orderReference: string;
   discount: number;
@@ -138,6 +141,8 @@ export const useStore = create<AppState>((set, get) => {
   staffUsers: [],
   selectedStaffId: null,
   selectedStaffName: '',
+  cartStaffId: null,
+  cartStaffName: '',
   orderType: 'table',
   orderReference: '',
   discount: 0,
@@ -313,14 +318,19 @@ export const useStore = create<AppState>((set, get) => {
     const cartKey = `${product.id}_${kotType}`;
     set((state) => {
       const existing = state.cart.find((item) => item.cartKey === cartKey);
+      // Lock the staff when the first item is added to an empty cart
+      const staffLock = state.cart.length === 0 && state.cartStaffId === null
+        ? { cartStaffId: state.selectedStaffId, cartStaffName: state.selectedStaffName }
+        : {};
       if (existing) {
         return {
+          ...staffLock,
           cart: state.cart.map((item) =>
             item.cartKey === cartKey ? { ...item, quantity: item.quantity + 1 } : item
           )
         };
       }
-      return { cart: [...state.cart, { ...product, quantity: 1, kotType, cartKey }] };
+      return { ...staffLock, cart: [...state.cart, { ...product, quantity: 1, kotType, cartKey }] };
     });
   },
 
@@ -370,7 +380,7 @@ export const useStore = create<AppState>((set, get) => {
     });
   },
 
-  clearCart: () => set({ cart: [], discount: 0, orderReference: '' }),
+  clearCart: () => set({ cart: [], discount: 0, orderReference: '', cartStaffId: null, cartStaffName: '' }),
 
   setOrderType: (type, ref) => set({ orderType: type, orderReference: ref }),
   
@@ -401,7 +411,9 @@ export const useStore = create<AppState>((set, get) => {
       orderType: order.type as 'table' | 'room' | 'takeaway' | 'delivery',
       orderReference: order.reference,
       discount: order.discount,
-      activeOrderId: order.id
+      activeOrderId: order.id,
+      cartStaffId: order.staff_id || null,
+      cartStaffName: order.staff_name || '',
     });
   },
 

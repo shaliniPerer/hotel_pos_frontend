@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Eye, ShoppingCart, CreditCard, Printer, Trash2 } from 'lucide-react';
+import { X, Eye, ShoppingCart, CreditCard, Printer, Trash2, ChevronLeft, Clock } from 'lucide-react';
 import { useStore } from '../store';
 import PaymentModal from './PaymentModal';
 import ReceiptModal from './ReceiptModal';
@@ -42,6 +42,9 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
   const [deleteFinishedPassword, setDeleteFinishedPassword] = useState('');
   const [deleteFinishedPasswordError, setDeleteFinishedPasswordError] = useState('');
   const [deleteFinishedLoading, setDeleteFinishedLoading] = useState(false);
+
+  // Order details panel
+  const [detailOrder, setDetailOrder] = useState<any | null>(null);
 
   // Sync tab to match the order type that just triggered the modal
   useEffect(() => {
@@ -304,18 +307,21 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
                         <button onClick={() => handleEditOrder(order)} className="hover:text-slate-900 transition-colors" title="Edit Order"><ShoppingCart size={20} /></button>
                         <button onClick={() => setPayingOrder(order)} className="hover:text-emerald-600 transition-colors" title="Payment"><CreditCard size={20} /></button>
                         <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
+                        <button onClick={() => setDetailOrder(order)} className="hover:text-blue-600 transition-colors" title="Order Details"><Eye size={20} /></button>
                         <button onClick={() => handleVoidOrder(order.id)} className="hover:text-red-600 transition-colors" title="Delete/Void KOT"><Trash2 size={20} /></button>
                       </>
                     )}
                     {status === 'finished' && (
                       <>
                         <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
+                        <button onClick={() => setDetailOrder(order)} className="hover:text-blue-600 transition-colors" title="Order Details"><Eye size={20} /></button>
                         <button onClick={() => handleDeleteOrder(order.id)} className="hover:text-red-600 transition-colors" title="Delete Record"><Trash2 size={20} /></button>
                       </>
                     )}
                     {status === 'void' && (
                       <>
                         <button onClick={() => setPrintOrder(order)} className="hover:text-slate-900 transition-colors" title="Print Bill"><Printer size={20} /></button>
+                        <button onClick={() => setDetailOrder(order)} className="hover:text-blue-600 transition-colors" title="Order Details"><Eye size={20} /></button>
                         <button onClick={() => { setDeleteVoidOrderId(order.id); setDeleteVoidPassword(''); setDeleteVoidPasswordError(''); }} className="hover:text-red-600 transition-colors" title="Delete Void Record"><Trash2 size={20} /></button>
                       </>
                     )}
@@ -328,6 +334,115 @@ export default function OrdersManagementModal({ isOpen, onClose, initialType, on
           </div>
         </div>
       </div>
+
+      {/* Order Details Modal */}
+      {detailOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setDetailOrder(null)} className="text-slate-400 hover:text-slate-700"><ChevronLeft size={20} /></button>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Order Details</h3>
+                  <p className="text-xs text-slate-500">#{detailOrder.order_number}</p>
+                </div>
+              </div>
+              <button onClick={() => setDetailOrder(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            {/* Body */}
+            <div className="overflow-y-auto custom-scrollbar flex-1 p-5 space-y-5">
+              {/* Order meta */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-500 text-xs block mb-0.5">Type / Reference</span>
+                  <span className="font-semibold text-slate-800">
+                    {detailOrder.type === 'table' ? `Dine-In · Table ${detailOrder.reference || '—'}` :
+                     detailOrder.type === 'room' ? `Room Service · Room ${detailOrder.reference || '—'}` :
+                     detailOrder.type === 'takeaway' ? `Takeaway${detailOrder.reference ? ` · ${detailOrder.reference}` : ''}` :
+                     `Delivery${detailOrder.reference ? ` · ${detailOrder.reference}` : ''}`}
+                  </span>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-500 text-xs block mb-0.5">Staff</span>
+                  <span className="font-semibold text-slate-800">{detailOrder.staff_name || '—'}</span>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-500 text-xs block mb-0.5">Status</span>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    detailOrder.status === 'active' ? 'bg-yellow-100 text-yellow-700' :
+                    detailOrder.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>{detailOrder.status}</span>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <span className="text-slate-500 text-xs block mb-0.5">Total</span>
+                  <span className="font-bold text-slate-900">LKR {(detailOrder.total || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Event timeline */}
+              {(() => {
+                const events: any[] = detailOrder.events || [];
+                if (events.length === 0) {
+                  return (
+                    <div className="text-sm text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">
+                      No KOT / BOT history recorded for this order.
+                    </div>
+                  );
+                }
+                return (
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Activity Timeline</h4>
+                    <div className="relative border-l-2 border-slate-200 ml-3 space-y-4">
+                      {events.map((evt: any, idx: number) => {
+                        const isKot = evt.event_type === 'KOT_SENT';
+                        const isBot = evt.event_type === 'BOT_SENT';
+                        const isRemoved = evt.event_type === 'ITEMS_REMOVED';
+                        const dotColor = isKot ? 'bg-green-500' : isBot ? 'bg-blue-500' : 'bg-red-500';
+                        const labelColor = isKot ? 'bg-green-100 text-green-700' : isBot ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700';
+                        const label = isKot ? 'KOT Sent' : isBot ? 'BOT Sent' : 'Items Removed';
+                        const timeStr = (() => {
+                          const d = new Date(evt.timestamp);
+                          return isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                        })();
+                        return (
+                          <div key={idx} className="pl-6 relative">
+                            <span className={`absolute -left-2 top-1 w-4 h-4 rounded-full border-2 border-white ${dotColor}`}></span>
+                            <div className="bg-slate-50 rounded-xl p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${labelColor}`}>{label}</span>
+                                <span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={11} />{timeStr}</span>
+                              </div>
+                              <div className="space-y-1">
+                                {(evt.items || []).map((item: any, iIdx: number) => (
+                                  <div key={iIdx} className="flex justify-between text-sm">
+                                    <span className={`truncate max-w-[70%] ${isRemoved ? 'line-through text-red-400' : 'text-slate-700'}`}>{item.product_name}</span>
+                                    <span className={`font-medium tabular-nums ${isRemoved ? 'text-red-400' : 'text-slate-700'}`}>×{item.quantity}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100">
+              <button
+                onClick={() => setDetailOrder(null)}
+                className="w-full py-2.5 bg-slate-800 text-white rounded-xl font-medium hover:bg-black transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {payingOrder && (
         <PaymentModal
