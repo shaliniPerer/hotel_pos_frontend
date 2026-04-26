@@ -179,12 +179,11 @@ export default function RoomService() {
     notes: '',
     payment_type: 'Cash',
     payment_status: 'Pending',
+    payment_amount: '', // New: for partial/paid
   });
   const [bookingFormLoading, setBookingFormLoading] = useState(false);
   const [bookingFormError, setBookingFormError] = useState('');
   const [bookingFormSuccess, setBookingFormSuccess] = useState('');
-
-  // Delete confirms
   const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
   const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null);
   const [printingBooking, setPrintingBooking] = useState<RoomBooking | null>(null);
@@ -1059,20 +1058,55 @@ export default function RoomService() {
                           <select value={bookingForm.payment_type}
                             onChange={(e) => setBookingForm({ ...bookingForm, payment_type: e.target.value })}
                             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 bg-white">
-                            {['Cash', 'Card', 'Bank Transfer', 'Online'].map((t) => (
+                            {['Cash', 'Card', 'Bank Transfer'].map((t) => (
                               <option key={t} value={t}>{t}</option>
                             ))}
                           </select>
                         </FormField>
                         <FormField label="Payment Status">
-                          <select value={bookingForm.payment_status}
-                            onChange={(e) => setBookingForm({ ...bookingForm, payment_status: e.target.value })}
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 bg-white">
+                          <select
+                            value={bookingForm.payment_status}
+                            onChange={e => {
+                              const val = e.target.value;
+                              let amt = bookingForm.payment_amount;
+                              if (val === 'Paid') amt = bfTotalAmount.toString();
+                              if (val === 'Pending') amt = '';
+                              setBookingForm({ ...bookingForm, payment_status: val, payment_amount: amt });
+                            }}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 bg-white"
+                          >
                             {['Pending', 'Paid', 'Partial'].map((s) => (
                               <option key={s} value={s}>{s}</option>
                             ))}
                           </select>
                         </FormField>
+                        {/* Payment Amount for Partial or Paid */}
+                        {(bookingForm.payment_status === 'Partial' || bookingForm.payment_status === 'Paid') && (
+                          <FormField label={bookingForm.payment_status === 'Partial' ? 'Payment Amount (Partial)' : 'Payment Amount'}>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={bookingForm.payment_amount}
+                              onChange={e => {
+                                let val = e.target.value;
+                                // For Paid, always set to total
+                                if (bookingForm.payment_status === 'Paid') val = bfTotalAmount.toString();
+                                setBookingForm({ ...bookingForm, payment_amount: val });
+                              }}
+                              disabled={bookingForm.payment_status === 'Paid'}
+                              placeholder={bfTotalAmount.toString()}
+                              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                            />
+                            {/* Dynamic paid/remaining display */}
+                            <div className="text-xs mt-1">
+                              <span className="font-semibold text-slate-700">Paid:</span> LKR {Number(bookingForm.payment_amount || 0).toLocaleString()} |{' '}
+                              <span className={Number(bookingForm.payment_amount || 0) < bfTotalAmount ? 'text-red-500 font-semibold' : 'text-emerald-600 font-semibold'}>
+                                Remaining: LKR {(bfTotalAmount - Number(bookingForm.payment_amount || 0)).toLocaleString()}
+                              </span>
+                            </div>
+                          </FormField>
+                        )}
                       </div>
                       <div className="mt-4">
                         <FormField label="Notes">
@@ -1135,17 +1169,43 @@ export default function RoomService() {
                               <span>Total Payment</span>
                               <span className="text-cyan-700">LKR {bfTotalAmount.toLocaleString()}</span>
                             </div>
+                            {/* Deducted/paid and remaining for partial payment */}
+                            {bookingForm.payment_status === 'Partial' && !!bookingForm.payment_amount && (
+                              <div className="flex justify-between text-sm font-semibold mt-2">
+                                <span className="text-emerald-700">Paid (Deducted)</span>
+                                <span className="text-emerald-700">LKR {Number(bookingForm.payment_amount).toLocaleString()}</span>
+                              </div>
+                            )}
+                            {bookingForm.payment_status === 'Partial' && !!bookingForm.payment_amount && (
+                              <div className="flex justify-between text-sm font-semibold">
+                                <span className="text-red-600">Remaining</span>
+                                <span className="text-red-600">LKR {(bfTotalAmount - Number(bookingForm.payment_amount)).toLocaleString()}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
 
                       <div className="flex gap-3 pt-4">
-                        <button type="button" onClick={() => resetBookingForm()}
-                          className="px-5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => resetBookingForm()}
+                          className="px-5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
                           Clear
                         </button>
-                        <button type="button" onClick={() => saveBooking(false)} disabled={bookingFormLoading}
-                          className="flex-1 px-5 py-2.5 bg-cyan-600 text-white rounded-xl text-sm font-semibold hover:bg-cyan-700 transition-colors disabled:opacity-60">
+                        <button
+                          type="button"
+                          onClick={() => saveBooking(false)}
+                          disabled={
+                            bookingFormLoading ||
+                            // Validation: for Partial, must enter amount < total
+                            (bookingForm.payment_status === 'Partial' && (!bookingForm.payment_amount || Number(bookingForm.payment_amount) <= 0 || Number(bookingForm.payment_amount) >= bfTotalAmount)) ||
+                            // For Paid, must match total
+                            (bookingForm.payment_status === 'Paid' && Number(bookingForm.payment_amount) !== bfTotalAmount)
+                          }
+                          className="flex-1 px-5 py-2.5 bg-cyan-600 text-white rounded-xl text-sm font-semibold hover:bg-cyan-700 transition-colors disabled:opacity-60"
+                        >
                           {bookingFormLoading ? 'Creating…' : 'Create Booking'}
                         </button>
                       </div>

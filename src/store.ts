@@ -318,19 +318,14 @@ export const useStore = create<AppState>((set, get) => {
     const cartKey = `${product.id}_${kotType}`;
     set((state) => {
       const existing = state.cart.find((item) => item.cartKey === cartKey);
-      // Lock the staff when the first item is added to an empty cart
-      const staffLock = state.cart.length === 0 && state.cartStaffId === null
-        ? { cartStaffId: state.selectedStaffId, cartStaffName: state.selectedStaffName }
-        : {};
       if (existing) {
         return {
-          ...staffLock,
           cart: state.cart.map((item) =>
             item.cartKey === cartKey ? { ...item, quantity: item.quantity + 1 } : item
           )
         };
       }
-      return { ...staffLock, cart: [...state.cart, { ...product, quantity: 1, kotType, cartKey }] };
+      return { cart: [...state.cart, { ...product, quantity: 1, kotType, cartKey }] };
     });
   },
 
@@ -380,7 +375,15 @@ export const useStore = create<AppState>((set, get) => {
     });
   },
 
-  clearCart: () => set({ cart: [], discount: 0, orderReference: '', cartStaffId: null, cartStaffName: '' }),
+  clearCart: () => set({
+    cart: [],
+    discount: 0,
+    orderReference: '',
+    cartStaffId: null,
+    cartStaffName: '',
+    selectedStaffId: null,
+    selectedStaffName: '',
+  }),
 
   setOrderType: (type, ref) => set({ orderType: type, orderReference: ref }),
   

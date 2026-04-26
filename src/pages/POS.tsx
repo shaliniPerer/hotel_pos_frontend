@@ -307,6 +307,7 @@ export default function POS() {
                   setActiveCategory(null);
                   setSearchQuery('');
                   setIsCartOpen(false);
+                  setSelectedStaff(null, '');
                 }}
                 className={`h-10 px-3 sm:px-5 rounded-lg flex items-center gap-1.5 sm:gap-2 text-sm sm:text-base font-medium shadow-sm ${isDarkMode ? 'bg-cyan-700 hover:bg-cyan-600 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'}`}
               >
@@ -416,7 +417,8 @@ export default function POS() {
             <div className={`px-4 py-2.5 border-b ${isDarkMode ? 'border-slate-700 bg-slate-900/40' : 'border-slate-100 bg-slate-50/60'}`}>
               <div className="relative" ref={staffDropdownRef}>
                 <button
-                  onClick={() => setShowStaffDropdown(v => !v)}
+                  onClick={() => { if (!cartStaffId) setShowStaffDropdown(v => !v); }}
+                  disabled={!!cartStaffId}
                   className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
                 >
                   <span className="flex items-center gap-2">
@@ -424,7 +426,7 @@ export default function POS() {
                       {selectedStaffName ? selectedStaffName.charAt(0).toUpperCase() : '?'}
                     </div>
                     <span className={selectedStaffId ? '' : (isDarkMode ? 'text-slate-400' : 'text-slate-400')}>
-                      {selectedStaffName || 'Select Staff'}
+                      {cartStaffName || selectedStaffName || 'Select Staff'}
                     </span>
                   </span>
                   <ChevronDown size={14} className={`transition-transform ${showStaffDropdown ? 'rotate-180' : ''}`} />
@@ -432,7 +434,8 @@ export default function POS() {
                 {showStaffDropdown && (
                   <div className={`absolute left-0 right-0 top-full mt-1 rounded-xl border shadow-lg z-50 overflow-hidden max-h-52 overflow-y-auto ${isDarkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'}`}>
                     <button
-                      onClick={() => { setSelectedStaff(null, ''); setShowStaffDropdown(false); }}
+                      onClick={() => { if (!cartStaffId) { setSelectedStaff(null, ''); setShowStaffDropdown(false); } }}
+                      disabled={!!cartStaffId}
                       className={`w-full text-left px-4 py-2.5 text-sm border-b flex items-center gap-2 ${isDarkMode ? 'text-slate-400 hover:bg-slate-700 border-slate-700' : 'text-slate-400 hover:bg-slate-50 border-slate-100'}`}
                     >
                       <span>— No Staff —</span>
@@ -440,7 +443,8 @@ export default function POS() {
                     {staffUsers.map(s => (
                       <button
                         key={s.id}
-                        onClick={() => { setSelectedStaff(s.id, s.name); setShowStaffDropdown(false); }}
+                        onClick={() => { if (!cartStaffId) { setSelectedStaff(s.id, s.name); setShowStaffDropdown(false); } }}
+                        disabled={!!cartStaffId}
                         className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 ${selectedStaffId === s.id ? (isDarkMode ? 'bg-cyan-800 text-white' : 'bg-cyan-50 text-cyan-700 font-semibold') : (isDarkMode ? 'text-slate-200 hover:bg-slate-700' : 'text-slate-700 hover:bg-slate-50')}`}
                       >
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${selectedStaffId === s.id ? 'bg-cyan-500 text-white' : (isDarkMode ? 'bg-slate-600 text-slate-300' : 'bg-slate-100 text-slate-600')}`}>
@@ -512,7 +516,7 @@ export default function POS() {
               </div>
             </div>
             <button 
-              disabled={cart.length === 0 || isSavingOrder || !selectedStaffId} 
+              disabled={cart.length === 0 || isSavingOrder || (!selectedStaffId && !cartStaffId)} 
               onClick={async () => {
                 if (activeOrderId) {
                   // Editing existing order — skip delivery modal, save & show KOT directly
@@ -741,6 +745,12 @@ export default function POS() {
                     deliveryMethod === 'takeaway' ? phone :
                     `${phone} - ${customerName} - ${customerAddress}`;
 
+                  // Require pax for dine-in and room service
+                  if ((deliveryMethod === 'dine_in' || deliveryMethod === 'room_service') && (!pax || pax.trim() === '' || isNaN(Number(pax)) || Number(pax) <= 0)) {
+                    alert('Please enter the number of pax (guests) before continuing.');
+                    return;
+                  }
+
                   // Block if table is already occupied
                   if (type === 'table' && orders.some(o => o.type === 'table' && o.status === 'active' && o.reference === tableNo)) {
                     return;
@@ -927,7 +937,14 @@ export default function POS() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => { setShowKOTModal(false); }}
+                    onClick={() => {
+                      setShowKOTModal(false);
+                      clearCart();
+                      setActiveOrderId(null);
+                      setOriginalOrderItems([]);
+                      setSelectedStaff(null, '');
+                      setIsCartOpen(false);
+                    }}
                     className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                   >
                     Close
@@ -1327,7 +1344,10 @@ export default function POS() {
         isOpen={showOrdersManagementModal} 
         onClose={() => setShowOrdersManagementModal(false)}
         initialType={orderType}
-        onEditOrder={(order) => setOriginalOrderItems(order.items || [])}
+        onEditOrder={(order) => {
+          setOriginalOrderItems(order.items || []);
+          setIsCartOpen(true);
+        }}
         onOpenDetails={() => { fetchOrders(); setShowOrdersManagementModal(false); setShowKOTBillsModal(true); }}
       />
 
