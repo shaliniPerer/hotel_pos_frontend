@@ -152,7 +152,7 @@ export default function POS() {
   });
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = (deliveryMethod === 'takeaway' || deliveryMethod === 'delivery') ? 0 : subtotal * 0.1; // 10% service charge (dine-in & room service only)
+  const tax = (deliveryMethod === 'dine_in' || deliveryMethod === 'room_service') ? subtotal * 0.1 : 0; // 10% service charge for dine-in & room service only
   const total = subtotal + tax - discount;
 
   const handleCheckout = async () => {
